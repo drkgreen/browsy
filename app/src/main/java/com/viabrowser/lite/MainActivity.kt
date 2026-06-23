@@ -305,14 +305,29 @@ class MainActivity : AppCompatActivity() {
         Thread {
             val host = Uri.parse(url).host ?: return@Thread
 
-            // Önce Google'ın favicon servisini dene, başarısız olursa Yandex'e düş.
-            val bitmap = downloadBitmap("https://www.google.com/s2/favicons?domain=$host&sz=64")
-                ?: downloadBitmap("https://favicon.yandex.net/favicon/$host")
+            // Sırayla dene: Google -> Yandex -> DuckDuckGo.
+            // Google bulamadığında küçük (16x16) jenerik bir "globe" ikonu döner;
+            // bunu gerçek ikon sanıp kabul etmemek için boyut kontrolü yapıyoruz.
+            val sources = listOf(
+                "https://www.google.com/s2/favicons?domain=$host&sz=128",
+                "https://favicon.yandex.net/favicon/$host",
+                "https://icons.duckduckgo.com/ip3/$host.ico"
+            )
 
-            if (bitmap != null) {
-                cacheFavicon(url, bitmap)
+            var bestBitmap: Bitmap? = null
+            for (source in sources) {
+                val result = downloadBitmap(source) ?: continue
+                if (bestBitmap == null) bestBitmap = result
+                if (result.width >= 32 && result.height >= 32) {
+                    bestBitmap = result
+                    break
+                }
+            }
+
+            if (bestBitmap != null) {
+                cacheFavicon(url, bestBitmap)
                 runOnUiThread {
-                    bookmarks.find { it.url == url }?.icon = bitmap
+                    bookmarks.find { it.url == url }?.icon = bestBitmap
                     refreshBookmarksGrid()
                 }
             }
