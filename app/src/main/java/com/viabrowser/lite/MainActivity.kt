@@ -6,11 +6,13 @@ import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.content.Context
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.text.InputType
 import android.text.TextUtils
+import android.transition.TransitionManager
 import android.util.Base64
 import android.view.Gravity
 import android.view.KeyEvent
@@ -112,6 +114,9 @@ class MainActivity : AppCompatActivity() {
                 if (!binding.editUrl.hasFocus()) {
                     binding.editUrl.setText(view.title?.takeIf { it.isNotBlank() } ?: url)
                 }
+                binding.swipeRefresh.isRefreshing = false
+                showBars()
+                applyThemeColorFromPage()
             }
         }
 
@@ -143,14 +148,67 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+
+        binding.swipeRefresh.setOnRefreshListener {
+            binding.webView.reload()
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            webView.setOnScrollChangeListener { _, _, scrollY, _, oldScrollY ->
+                val delta = scrollY - oldScrollY
+                if (delta > 10) {
+                    hideBars()
+                } else if (delta < -10) {
+                    showBars()
+                }
+            }
+        }
+    }
+
+    private fun hideBars() {
+        if (binding.topToolbar.visibility == View.VISIBLE) {
+            TransitionManager.beginDelayedTransition(binding.browserRoot)
+            binding.topToolbar.visibility = View.GONE
+            binding.bottomNavBar.visibility = View.GONE
+        }
+    }
+
+    private fun showBars() {
+        if (binding.topToolbar.visibility != View.VISIBLE) {
+            TransitionManager.beginDelayedTransition(binding.browserRoot)
+        }
+        binding.topToolbar.visibility = View.VISIBLE
+        binding.bottomNavBar.visibility = View.VISIBLE
+    }
+
+    private fun applyThemeColorFromPage() {
+        binding.webView.evaluateJavascript(
+            "(function(){var m=document.querySelector('meta[name=\"theme-color\"]');" +
+                "return m?m.getAttribute('content'):'';})();"
+        ) { result ->
+            val raw = result?.trim('"')?.takeIf { it.isNotBlank() && it != "null" }
+            val color = raw?.let { parseCssColor(it) } ?: Color.WHITE
+            binding.topToolbar.setBackgroundColor(color)
+            binding.bottomNavBar.setBackgroundColor(color)
+        }
+    }
+
+    private fun parseCssColor(value: String): Int? {
+        return try {
+            if (value.startsWith("rgb")) {
+                val nums = Regex("\\d+").findAll(value).map { it.value.toInt() }.toList()
+                if (nums.size >= 3) Color.rgb(nums[0], nums[1], nums[2]) else null
+            } else {
+                Color.parseColor(value)
+            }
+        } catch (e: Exception) {
+            null
+        }
     }
 
     private var suppressUrlFocusRevert = false
 
     private fun setupControls() {
-        binding.btnReload.setOnClickListener {
-            binding.webView.reload()
-        }
         binding.btnMenu.setOnClickListener { anchor ->
             showBrowserMenu(anchor)
         }
