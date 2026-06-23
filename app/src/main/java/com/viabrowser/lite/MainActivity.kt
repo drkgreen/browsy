@@ -207,18 +207,15 @@ class MainActivity : AppCompatActivity() {
         val title = binding.webView.title?.takeIf { it.isNotBlank() }
             ?: url.removePrefix("https://").removePrefix("http://")
 
-        val favicon = binding.webView.favicon
-        val item = BookmarkItem(title, url, favicon)
-        bookmarks.add(item)
+        // WebView'in kendi favicon'u varsa anlık önizleme olarak kullan,
+        // gerçek/güvenilir ikon için her zaman ağdan da indirmeyi dene.
+        val placeholderIcon = binding.webView.favicon
+        bookmarks.add(BookmarkItem(title, url, placeholderIcon))
         saveBookmarksList()
         refreshBookmarksGrid()
         Toast.makeText(this, "Ana ekrana eklendi", Toast.LENGTH_SHORT).show()
 
-        if (favicon != null) {
-            cacheFavicon(url, favicon)
-        } else {
-            fetchFaviconAsync(url)
-        }
+        fetchFaviconAsync(url)
     }
 
     private fun showHomeScreen() {
@@ -306,26 +303,44 @@ class MainActivity : AppCompatActivity() {
 
     private fun fetchFaviconAsync(url: String) {
         Thread {
-            try {
-                val host = Uri.parse(url).host ?: return@Thread
-                val faviconUrl = "https://www.google.com/s2/favicons?domain=$host&sz=64"
-                val connection = URL(faviconUrl).openConnection() as HttpURLConnection
-                connection.connectTimeout = 5000
-                connection.readTimeout = 5000
-                connection.connect()
-                val bitmap = BitmapFactory.decodeStream(connection.inputStream)
-                connection.inputStream.close()
-                if (bitmap != null) {
-                    cacheFavicon(url, bitmap)
-                    runOnUiThread {
-                        bookmarks.find { it.url == url }?.icon = bitmap
-                        refreshBookmarksGrid()
-                    }
+            val host = Uri.parse(url).host ?: return@Thread
+
+            // Önce Google'ın favicon servisini dene, başarısız olursa Yandex'e düş.
+            val bitmap = downloadBitmap("https://www.google.com/s2/favicons?domain=$host&sz=64")
+                ?: downloadBitmap("https://favicon.yandex.net/favicon/$host")
+
+            if (bitmap != null) {
+                cacheFavicon(url, bitmap)
+                runOnUiThread {
+                    bookmarks.find { it.url == url }?.icon = bitmap
+                    refreshBookmarksGrid()
                 }
-            } catch (e: Exception) {
-                // ağ hatası olursa sessizce yoksay, harf ikonu kalır
             }
         }.start()
+    }
+
+    private fun downloadBitmap(urlString: String): Bitmap? {
+        var connection: HttpURLConnection? = null
+        return try {
+            connection = URL(urlString).openConnection() as HttpURLConnection
+            connection.connectTimeout = 5000
+            connection.readTimeout = 5000
+            connection.instanceFollowRedirects = true
+            connection.setRequestProperty(
+                "User-Agent",
+                "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome Mobile Safari/537.36"
+            )
+            connection.connect()
+            if (connection.responseCode != HttpURLConnection.HTTP_OK) {
+                null
+            } else {
+                BitmapFactory.decodeStream(connection.inputStream)
+            }
+        } catch (e: Exception) {
+            null
+        } finally {
+            connection?.disconnect()
+        }
     }
 
     // ---- Ana ekran grid'i ----
@@ -400,7 +415,28 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        if (!isAddTile && url != null) {
+            container.setOnLongClickListener {
+                showDeleteBookmarkDialog(title, url)
+                true
+            }
+        }
+
         return container
+    }
+
+    private fun showDeleteBookmarkDialog(title: String, url: String) {
+        AlertDialog.Builder(this)
+            .setTitle("Yer İmini Sil")
+            .setMessage("\"$title\" silinsin mi?")
+            .setPositiveButton("Sil") { _, _ ->
+                bookmarks.removeAll { it.url == url }
+                getSharedPreferences("via_lite_prefs", MODE_PRIVATE).edit().remove(faviconKey(url)).apply()
+                saveBookmarksList()
+                refreshBookmarksGrid()
+            }
+            .setNegativeButton("Vazgeç", null)
+            .show()
     }
 
     private fun showAddBookmarkDialog() {
