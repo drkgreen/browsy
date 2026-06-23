@@ -18,6 +18,7 @@ import android.webkit.WebViewClient
 import android.widget.EditText
 import android.widget.GridLayout
 import android.widget.LinearLayout
+import android.widget.PopupMenu
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
@@ -29,6 +30,7 @@ import java.net.URLEncoder
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
+
     private val bookmarks = mutableListOf<Pair<String, String>>()
 
     private val adHosts = setOf(
@@ -104,14 +106,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupControls() {
-        binding.btnBack.setOnClickListener {
-            if (binding.webView.canGoBack()) binding.webView.goBack()
-        }
-        binding.btnForward.setOnClickListener {
-            if (binding.webView.canGoForward()) binding.webView.goForward()
-        }
         binding.btnReload.setOnClickListener {
             binding.webView.reload()
+        }
+        binding.btnMenu.setOnClickListener { anchor ->
+            showBrowserMenu(anchor)
         }
         binding.editUrl.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_GO || actionId == EditorInfo.IME_ACTION_DONE) {
@@ -122,6 +121,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // Alt bar
         binding.btnBottomBack.setOnClickListener {
             if (binding.webView.canGoBack()) {
                 showBrowser()
@@ -144,6 +144,7 @@ class MainActivity : AppCompatActivity() {
             finishAffinity()
         }
 
+        // Açılış ekranı arama kutusu
         binding.homeSearchBox.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_GO || actionId == EditorInfo.IME_ACTION_DONE) {
                 val input = binding.homeSearchBox.text.toString().trim()
@@ -158,6 +159,35 @@ class MainActivity : AppCompatActivity() {
                 false
             }
         }
+    }
+
+    private fun showBrowserMenu(anchor: View) {
+        val popup = PopupMenu(this, anchor)
+        popup.menuInflater.inflate(R.menu.browser_menu, popup.menu)
+        popup.setOnMenuItemClickListener { item ->
+            if (item.itemId == R.id.menu_add_to_home) {
+                addCurrentPageToHome()
+                true
+            } else {
+                false
+            }
+        }
+        popup.show()
+    }
+
+    private fun addCurrentPageToHome() {
+        val url = binding.webView.url
+        if (url.isNullOrBlank()) {
+            Toast.makeText(this, "Eklenecek bir sayfa yok", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val title = binding.webView.title?.takeIf { it.isNotBlank() }
+            ?: url.removePrefix("https://").removePrefix("http://")
+
+        bookmarks.add(title to url)
+        saveBookmarks()
+        refreshBookmarksGrid()
+        Toast.makeText(this, "Ana ekrana eklendi", Toast.LENGTH_SHORT).show()
     }
 
     private fun showHomeScreen() {
