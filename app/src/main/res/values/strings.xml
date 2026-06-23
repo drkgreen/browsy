@@ -4,4 +4,7 @@
     <string name="back">Geri</string>
     <string name="forward">İleri</string>
     <string name="reload">Yenile</string>
+    <string name="home">Ana sayfa</string>
+    <string name="tabs">Sekmeler</string>
+    <string name="close">Kapat</string>
 </resources>
