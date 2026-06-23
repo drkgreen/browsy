@@ -32,6 +32,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.viabrowser.lite.databinding.ActivityMainBinding
+import org.json.JSONObject
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
@@ -306,37 +307,170 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private val maxHtmlChars = 100_000
+
     private fun fetchFaviconAsync(url: String) {
         Thread {
-            val host = Uri.parse(url).host ?: return@Thread
+            // 1) Önce sitenin kendi HTML'sindeki apple-touch-icon / manifest ikonunu dene
+            // (Opera/Chrome'un yaptığı gibi) — bunlar boşluksuz, yüksek çözünürlüklüdür.
+            var bitmap: Bitmap? = null
+            val pageIconUrl = findBestIconUrlFromPage(url)
+            if (pageIconUrl != null) {
+                bitmap = downloadBitmap(pageIconUrl)
+            }
 
-            // Sırayla dene: Google -> Yandex -> DuckDuckGo.
-            // Google bulamadığında küçük (16x16) jenerik bir "globe" ikonu döner;
-            // bunu gerçek ikon sanıp kabul etmemek için boyut kontrolü yapıyoruz.
-            val sources = listOf(
-                "https://www.google.com/s2/favicons?domain=$host&sz=128",
-                "https://favicon.yandex.net/favicon/$host",
-                "https://icons.duckduckgo.com/ip3/$host.ico"
-            )
-
-            var bestBitmap: Bitmap? = null
-            for (source in sources) {
-                val result = downloadBitmap(source) ?: continue
-                if (bestBitmap == null) bestBitmap = result
-                if (result.width >= 32 && result.height >= 32) {
-                    bestBitmap = result
-                    break
+            // 2) Bulunamazsa veya çok küçükse eski favicon servislerine düş.
+            if (bitmap == null || bitmap.width < 48 || bitmap.height < 48) {
+                val host = Uri.parse(url).host
+                if (host != null) {
+                    val sources = listOf(
+                        "https://www.google.com/s2/favicons?domain=$host&sz=128",
+                        "https://favicon.yandex.net/favicon/$host",
+                        "https://icons.duckduckgo.com/ip3/$host.ico"
+                    )
+                    for (source in sources) {
+                        val result = downloadBitmap(source) ?: continue
+                        if (bitmap == null) bitmap = result
+                        if (result.width >= 48 && result.height >= 48) {
+                            bitmap = result
+                            break
+                        }
+                    }
                 }
             }
 
-            if (bestBitmap != null) {
-                cacheFavicon(url, bestBitmap)
+            if (bitmap != null) {
+                cacheFavicon(url, bitmap)
                 runOnUiThread {
-                    bookmarks.find { it.url == url }?.icon = bestBitmap
+                    bookmarks.find { it.url == url }?.icon = bitmap
                     refreshBookmarksGrid()
                 }
             }
         }.start()
+    }
+
+    // ---- Sayfanın kendi HTML'sinden yüksek çözünürlüklü ikon bulma ----
+
+    private fun findBestIconUrlFromPage(pageUrl: String): String? {
+        val html = fetchHtmlSnippet(pageUrl) ?: return null
+
+        val linkTagRegex = Regex("<link\\b[^>]*>", RegexOption.IGNORE_CASE)
+        var bestUrl: String? = null
+        var bestSize = 0
+        var manifestUrl: String? = null
+
+        for (match in linkTagRegex.findAll(html)) {
+            val tag = match.value
+            val rel = Regex("rel\\s*=\\s*[\"']([^\"']+)[\"']", RegexOption.IGNORE_CASE)
+                .find(tag)?.groupValues?.get(1)?.lowercase() ?: continue
+            val href = Regex("href\\s*=\\s*[\"']([^\"']+)[\"']", RegexOption.IGNORE_CASE)
+                .find(tag)?.groupValues?.get(1) ?: continue
+
+            when {
+                rel.contains("apple-touch-icon") -> {
+                    val sizesAttr = Regex("sizes\\s*=\\s*[\"']([^\"']+)[\"']", RegexOption.IGNORE_CASE)
+                        .find(tag)?.groupValues?.get(1)
+                    val size = parseSize(sizesAttr) ?: 180
+                    if (size > bestSize) {
+                        bestSize = size
+                        bestUrl = toAbsoluteUrl(pageUrl, href)
+                    }
+                }
+                rel == "manifest" -> {
+                    manifestUrl = toAbsoluteUrl(pageUrl, href)
+                }
+            }
+        }
+
+        if (bestUrl != null) return bestUrl
+
+        if (manifestUrl != null) {
+            val manifestIcon = findBestIconFromManifest(manifestUrl)
+            if (manifestIcon != null) return manifestIcon
+        }
+
+        return null
+    }
+
+    private fun parseSize(sizesAttr: String?): Int? {
+        if (sizesAttr.isNullOrBlank()) return null
+        val match = Regex("(\\d+)x(\\d+)", RegexOption.IGNORE_CASE).find(sizesAttr)
+        return match?.groupValues?.get(1)?.toIntOrNull()
+    }
+
+    private fun toAbsoluteUrl(baseUrl: String, href: String): String? {
+        return try {
+            URL(URL(baseUrl), href).toString()
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun fetchHtmlSnippet(pageUrl: String): String? {
+        var connection: HttpURLConnection? = null
+        return try {
+            connection = URL(pageUrl).openConnection() as HttpURLConnection
+            connection.connectTimeout = 5000
+            connection.readTimeout = 5000
+            connection.instanceFollowRedirects = true
+            connection.setRequestProperty(
+                "User-Agent",
+                "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome Mobile Safari/537.36"
+            )
+            connection.connect()
+            if (connection.responseCode != HttpURLConnection.HTTP_OK) return null
+
+            val reader = connection.inputStream.bufferedReader(Charsets.UTF_8)
+            val sb = StringBuilder()
+            val buffer = CharArray(4096)
+            var totalRead = 0
+            while (totalRead < maxHtmlChars) {
+                val read = reader.read(buffer)
+                if (read == -1) break
+                sb.append(buffer, 0, read)
+                totalRead += read
+                if (sb.contains("</head>", ignoreCase = true)) break
+            }
+            reader.close()
+            if (sb.isEmpty()) null else sb.toString()
+        } catch (e: Exception) {
+            null
+        } finally {
+            connection?.disconnect()
+        }
+    }
+
+    private fun findBestIconFromManifest(manifestUrl: String): String? {
+        var connection: HttpURLConnection? = null
+        return try {
+            connection = URL(manifestUrl).openConnection() as HttpURLConnection
+            connection.connectTimeout = 5000
+            connection.readTimeout = 5000
+            connection.connect()
+            if (connection.responseCode != HttpURLConnection.HTTP_OK) return null
+
+            val text = connection.inputStream.bufferedReader(Charsets.UTF_8).readText()
+            val json = JSONObject(text)
+            val icons = json.optJSONArray("icons") ?: return null
+
+            var bestSrc: String? = null
+            var bestSize = 0
+            for (i in 0 until icons.length()) {
+                val icon = icons.getJSONObject(i)
+                val sizesAttr = icon.optString("sizes", "")
+                val size = parseSize(sizesAttr) ?: 0
+                val src = icon.optString("src", "")
+                if (src.isNotBlank() && size > bestSize) {
+                    bestSize = size
+                    bestSrc = src
+                }
+            }
+            bestSrc?.let { toAbsoluteUrl(manifestUrl, it) }
+        } catch (e: Exception) {
+            null
+        } finally {
+            connection?.disconnect()
+        }
     }
 
     private fun downloadBitmap(urlString: String): Bitmap? {
