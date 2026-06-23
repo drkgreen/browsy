@@ -145,6 +145,8 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private var suppressUrlFocusRevert = false
+
     private fun setupControls() {
         binding.btnReload.setOnClickListener {
             binding.webView.reload()
@@ -154,6 +156,7 @@ class MainActivity : AppCompatActivity() {
         }
         binding.editUrl.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_GO || actionId == EditorInfo.IME_ACTION_DONE) {
+                suppressUrlFocusRevert = true
                 loadFromInput()
                 binding.editUrl.clearFocus()
                 hideKeyboard(binding.editUrl)
@@ -164,16 +167,20 @@ class MainActivity : AppCompatActivity() {
         }
         binding.editUrl.setOnFocusChangeListener { _, hasFocus ->
             if (hasFocus) {
+                suppressUrlFocusRevert = false
                 val currentUrl = binding.webView.url
                 if (!currentUrl.isNullOrBlank()) {
                     binding.editUrl.setText(currentUrl)
                 }
                 binding.editUrl.selectAll()
             } else {
-                val title = binding.webView.title
-                if (!title.isNullOrBlank()) {
-                    binding.editUrl.setText(title)
+                if (!suppressUrlFocusRevert) {
+                    val title = binding.webView.title
+                    if (!title.isNullOrBlank()) {
+                        binding.editUrl.setText(title)
+                    }
                 }
+                suppressUrlFocusRevert = false
             }
         }
 
