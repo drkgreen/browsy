@@ -12,7 +12,6 @@ import android.os.Handler
 import android.os.Looper
 import android.text.InputType
 import android.text.TextUtils
-import android.transition.TransitionManager
 import android.util.Base64
 import android.view.Gravity
 import android.view.KeyEvent
@@ -166,26 +165,25 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun hideBars() {
-        if (binding.topToolbar.visibility == View.VISIBLE) {
-            TransitionManager.beginDelayedTransition(binding.browserRoot)
-            binding.topToolbar.visibility = View.GONE
-            binding.bottomNavBar.visibility = View.GONE
-        }
+        binding.topToolbar.visibility = View.GONE
+        binding.bottomNavBar.visibility = View.GONE
     }
 
     private fun showBars() {
-        if (binding.topToolbar.visibility != View.VISIBLE) {
-            TransitionManager.beginDelayedTransition(binding.browserRoot)
-        }
         binding.topToolbar.visibility = View.VISIBLE
         binding.bottomNavBar.visibility = View.VISIBLE
     }
 
     private fun applyThemeColorFromPage() {
-        binding.webView.evaluateJavascript(
-            "(function(){var m=document.querySelector('meta[name=\"theme-color\"]');" +
-                "return m?m.getAttribute('content'):'';})();"
-        ) { result ->
+        val js = "(function(){" +
+            "var nodes=document.querySelectorAll('meta[name=\"theme-color\"]');" +
+            "if(!nodes||nodes.length===0)return '';" +
+            "for(var i=0;i<nodes.length;i++){" +
+            "if(!nodes[i].getAttribute('media'))return nodes[i].getAttribute('content')||'';" +
+            "}" +
+            "return nodes[0].getAttribute('content')||'';" +
+            "})();"
+        binding.webView.evaluateJavascript(js) { result ->
             val raw = result?.trim('"')?.takeIf { it.isNotBlank() && it != "null" }
             val color = raw?.let { parseCssColor(it) } ?: Color.WHITE
             binding.topToolbar.setBackgroundColor(color)
@@ -230,7 +228,7 @@ class MainActivity : AppCompatActivity() {
                 if (!currentUrl.isNullOrBlank()) {
                     binding.editUrl.setText(currentUrl)
                 }
-                binding.editUrl.selectAll()
+                binding.editUrl.post { binding.editUrl.selectAll() }
             } else {
                 if (!suppressUrlFocusRevert) {
                     val title = binding.webView.title
