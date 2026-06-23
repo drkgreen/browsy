@@ -7,4 +7,5 @@
     <string name="home">Ana sayfa</string>
     <string name="tabs">Sekmeler</string>
     <string name="close">Kapat</string>
+    <string name="search_hint">Ara veya adres yazın</string>
 </resources>
