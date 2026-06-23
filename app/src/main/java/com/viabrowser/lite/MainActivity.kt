@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
+import android.content.Context
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
@@ -16,6 +17,7 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputMethodManager
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -107,7 +109,9 @@ class MainActivity : AppCompatActivity() {
 
             override fun onPageFinished(view: WebView, url: String) {
                 super.onPageFinished(view, url)
-                binding.editUrl.setText(url)
+                if (!binding.editUrl.hasFocus()) {
+                    binding.editUrl.setText(view.title?.takeIf { it.isNotBlank() } ?: url)
+                }
             }
         }
 
@@ -131,6 +135,13 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
             }
+
+            override fun onReceivedTitle(view: WebView, title: String) {
+                super.onReceivedTitle(view, title)
+                if (!binding.editUrl.hasFocus() && title.isNotBlank()) {
+                    binding.editUrl.setText(title)
+                }
+            }
         }
     }
 
@@ -144,9 +155,25 @@ class MainActivity : AppCompatActivity() {
         binding.editUrl.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_GO || actionId == EditorInfo.IME_ACTION_DONE) {
                 loadFromInput()
+                binding.editUrl.clearFocus()
+                hideKeyboard(binding.editUrl)
                 true
             } else {
                 false
+            }
+        }
+        binding.editUrl.setOnFocusChangeListener { _, hasFocus ->
+            if (hasFocus) {
+                val currentUrl = binding.webView.url
+                if (!currentUrl.isNullOrBlank()) {
+                    binding.editUrl.setText(currentUrl)
+                }
+                binding.editUrl.selectAll()
+            } else {
+                val title = binding.webView.title
+                if (!title.isNullOrBlank()) {
+                    binding.editUrl.setText(title)
+                }
             }
         }
 
@@ -180,9 +207,10 @@ class MainActivity : AppCompatActivity() {
                 if (input.isNotEmpty()) {
                     val url = resolveUrl(input)
                     showBrowser()
-                    binding.editUrl.setText(url)
                     binding.webView.loadUrl(url)
                 }
+                binding.homeSearchBox.clearFocus()
+                hideKeyboard(binding.homeSearchBox)
                 true
             } else {
                 false
@@ -248,6 +276,11 @@ class MainActivity : AppCompatActivity() {
         val input = binding.editUrl.text.toString().trim()
         if (input.isEmpty()) return
         binding.webView.loadUrl(resolveUrl(input))
+    }
+
+    private fun hideKeyboard(view: View) {
+        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        imm.hideSoftInputFromWindow(view.windowToken, 0)
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
