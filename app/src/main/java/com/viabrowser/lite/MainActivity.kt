@@ -19,6 +19,8 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
 
+    private val homeUrl = "https://www.google.com"
+
     // Basit reklam/izleyici engelleme listesi
     private val adHosts = setOf(
         "doubleclick.net",
@@ -41,9 +43,8 @@ class MainActivity : AppCompatActivity() {
         setupWebView()
         setupControls()
 
-        val startUrl = "https://www.google.com"
-        binding.editUrl.setText(startUrl)
-        binding.webView.loadUrl(startUrl)
+        binding.editUrl.setText(homeUrl)
+        binding.webView.loadUrl(homeUrl)
     }
 
     private fun setupWebView() {
@@ -109,6 +110,23 @@ class MainActivity : AppCompatActivity() {
             } else {
                 false
             }
+        }
+
+        // Alt bar
+        binding.btnBottomBack.setOnClickListener {
+            if (binding.webView.canGoBack()) binding.webView.goBack()
+        }
+        binding.btnBottomForward.setOnClickListener {
+            if (binding.webView.canGoForward()) binding.webView.goForward()
+        }
+        binding.btnHome.setOnClickListener {
+            binding.webView.loadUrl(homeUrl)
+        }
+        binding.btnTabs.setOnClickListener {
+            android.widget.Toast.makeText(this, "Sekmeler yakında eklenecek", android.widget.Toast.LENGTH_SHORT).show()
+        }
+        binding.btnClose.setOnClickListener {
+            finishAffinity()
         }
     }
 
