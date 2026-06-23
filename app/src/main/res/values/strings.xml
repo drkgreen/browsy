@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">ViaLite</string>
+    <string name="url_hint">URL veya arama yazın</string>
+    <string name="back">Geri</string>
+    <string name="forward">İleri</string>
+    <string name="reload">Yenile</string>
+</resources>
