@@ -1,10 +1,14 @@
 package com.viabrowser.lite
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
+import android.net.Uri
 import android.os.Bundle
 import android.text.InputType
 import android.text.TextUtils
+import android.util.Base64
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
@@ -17,6 +21,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.EditText
 import android.widget.GridLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.PopupMenu
 import android.widget.TextView
@@ -25,13 +30,18 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.viabrowser.lite.databinding.ActivityMainBinding
 import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.net.HttpURLConnection
+import java.net.URL
 import java.net.URLEncoder
+
+data class BookmarkItem(val title: String, val url: String, var icon: Bitmap? = null)
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
 
-    private val bookmarks = mutableListOf<Pair<String, String>>()
+    private val bookmarks = mutableListOf<BookmarkItem>()
 
     private val adHosts = setOf(
         "doubleclick.net",
@@ -101,6 +111,19 @@ class MainActivity : AppCompatActivity() {
                 binding.progressBar.progress = newProgress
                 binding.progressBar.visibility =
                     if (newProgress in 1..99) View.VISIBLE else View.GONE
+            }
+
+            override fun onReceivedIcon(view: WebView, icon: Bitmap) {
+                super.onReceivedIcon(view, icon)
+                val url = view.url
+                if (url != null) {
+                    val item = bookmarks.find { it.url == url }
+                    if (item != null && item.icon == null) {
+                        item.icon = icon
+                        cacheFavicon(url, icon)
+                        refreshBookmarksGrid()
+                    }
+                }
             }
         }
     }
@@ -184,10 +207,18 @@ class MainActivity : AppCompatActivity() {
         val title = binding.webView.title?.takeIf { it.isNotBlank() }
             ?: url.removePrefix("https://").removePrefix("http://")
 
-        bookmarks.add(title to url)
-        saveBookmarks()
+        val favicon = binding.webView.favicon
+        val item = BookmarkItem(title, url, favicon)
+        bookmarks.add(item)
+        saveBookmarksList()
         refreshBookmarksGrid()
         Toast.makeText(this, "Ana ekrana eklendi", Toast.LENGTH_SHORT).show()
+
+        if (favicon != null) {
+            cacheFavicon(url, favicon)
+        } else {
+            fetchFaviconAsync(url)
+        }
     }
 
     private fun showHomeScreen() {
@@ -225,32 +256,91 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // ---- Yer imi depolama ----
+
     private fun loadBookmarks() {
         bookmarks.clear()
         val raw = getSharedPreferences("via_lite_prefs", MODE_PRIVATE).getString("bookmarks", "") ?: ""
         if (raw.isNotBlank()) {
             raw.split("\n").forEach { line ->
                 val parts = line.split("::")
-                if (parts.size == 2) bookmarks.add(parts[0] to parts[1])
+                if (parts.size == 2) {
+                    val title = parts[0]
+                    val url = parts[1]
+                    bookmarks.add(BookmarkItem(title, url, loadCachedFavicon(url)))
+                }
             }
         }
     }
 
-    private fun saveBookmarks() {
-        val raw = bookmarks.joinToString("\n") { "${it.first}::${it.second}" }
+    private fun saveBookmarksList() {
+        val raw = bookmarks.joinToString("\n") { "${it.title}::${it.url}" }
         getSharedPreferences("via_lite_prefs", MODE_PRIVATE).edit().putString("bookmarks", raw).apply()
     }
 
-    private fun refreshBookmarksGrid() {
-        binding.bookmarksGrid.removeAllViews()
-        bookmarks.forEach { (title, url) ->
-            binding.bookmarksGrid.addView(buildBookmarkTile(title, url, false))
+    // ---- Favicon önbellekleme ----
+
+    private fun faviconKey(url: String): String = "favicon::$url"
+
+    private fun loadCachedFavicon(url: String): Bitmap? {
+        val base64 = getSharedPreferences("via_lite_prefs", MODE_PRIVATE).getString(faviconKey(url), null)
+            ?: return null
+        return try {
+            val bytes = Base64.decode(base64, Base64.DEFAULT)
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+        } catch (e: Exception) {
+            null
         }
-        binding.bookmarksGrid.addView(buildBookmarkTile("", null, true))
     }
 
-    private fun buildBookmarkTile(title: String, url: String?, isAddTile: Boolean): View {
+    private fun cacheFavicon(url: String, bitmap: Bitmap) {
+        try {
+            val stream = ByteArrayOutputStream()
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
+            val base64 = Base64.encodeToString(stream.toByteArray(), Base64.DEFAULT)
+            getSharedPreferences("via_lite_prefs", MODE_PRIVATE).edit().putString(faviconKey(url), base64).apply()
+        } catch (e: Exception) {
+            // önbellekleme başarısız olursa sessizce yoksay
+        }
+    }
+
+    private fun fetchFaviconAsync(url: String) {
+        Thread {
+            try {
+                val host = Uri.parse(url).host ?: return@Thread
+                val faviconUrl = "https://www.google.com/s2/favicons?domain=$host&sz=64"
+                val connection = URL(faviconUrl).openConnection() as HttpURLConnection
+                connection.connectTimeout = 5000
+                connection.readTimeout = 5000
+                connection.connect()
+                val bitmap = BitmapFactory.decodeStream(connection.inputStream)
+                connection.inputStream.close()
+                if (bitmap != null) {
+                    cacheFavicon(url, bitmap)
+                    runOnUiThread {
+                        bookmarks.find { it.url == url }?.icon = bitmap
+                        refreshBookmarksGrid()
+                    }
+                }
+            } catch (e: Exception) {
+                // ağ hatası olursa sessizce yoksay, harf ikonu kalır
+            }
+        }.start()
+    }
+
+    // ---- Ana ekran grid'i ----
+
+    private fun refreshBookmarksGrid() {
+        binding.bookmarksGrid.removeAllViews()
+        bookmarks.forEach { item ->
+            binding.bookmarksGrid.addView(buildBookmarkTile(item.title, item.url, item.icon, false))
+        }
+        binding.bookmarksGrid.addView(buildBookmarkTile("", null, null, true))
+    }
+
+    private fun buildBookmarkTile(title: String, url: String?, icon: Bitmap?, isAddTile: Boolean): View {
         val tileSize = resources.displayMetrics.widthPixels / 4
+        val iconSize = dp(60)
 
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -264,13 +354,24 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        val iconView = TextView(this).apply {
-            layoutParams = LinearLayout.LayoutParams(dp(48), dp(48))
-            gravity = Gravity.CENTER
-            textSize = 18f
-            setTextColor(Color.WHITE)
-            background = circleDrawable(if (isAddTile) 0xFF1976D2.toInt() else 0xFF9E9E9E.toInt())
-            text = if (isAddTile) "+" else (title.firstOrNull()?.uppercase() ?: "?")
+        val iconView: View = if (icon != null && !isAddTile) {
+            ImageView(this).apply {
+                layoutParams = LinearLayout.LayoutParams(iconSize, iconSize)
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                background = circleDrawable(0xFFEEEEEE.toInt())
+                clipToOutline = true
+                setPadding(dp(6), dp(6), dp(6), dp(6))
+                setImageBitmap(icon)
+            }
+        } else {
+            TextView(this).apply {
+                layoutParams = LinearLayout.LayoutParams(iconSize, iconSize)
+                gravity = Gravity.CENTER
+                textSize = 22f
+                setTextColor(Color.WHITE)
+                background = circleDrawable(if (isAddTile) 0xFF1976D2.toInt() else 0xFF9E9E9E.toInt())
+                text = if (isAddTile) "+" else (title.firstOrNull()?.uppercase() ?: "?")
+            }
         }
 
         val labelView = TextView(this).apply {
@@ -328,9 +429,10 @@ class MainActivity : AppCompatActivity() {
                 if (title.isEmpty()) {
                     title = url.removePrefix("https://").removePrefix("http://")
                 }
-                bookmarks.add(title to url)
-                saveBookmarks()
+                bookmarks.add(BookmarkItem(title, url, null))
+                saveBookmarksList()
                 refreshBookmarksGrid()
+                fetchFaviconAsync(url)
             }
             .setNegativeButton("Vazgeç", null)
             .show()
