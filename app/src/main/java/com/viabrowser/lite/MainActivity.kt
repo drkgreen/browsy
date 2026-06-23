@@ -6,11 +6,14 @@ import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.text.InputType
 import android.text.TextUtils
 import android.util.Base64
 import android.view.Gravity
 import android.view.KeyEvent
+import android.view.MotionEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.webkit.WebChromeClient
@@ -42,6 +45,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
 
     private val bookmarks = mutableListOf<BookmarkItem>()
+
+    private val longPressHandler = Handler(Looper.getMainLooper())
 
     private val adHosts = setOf(
         "doubleclick.net",
@@ -387,7 +392,7 @@ class MainActivity : AppCompatActivity() {
         val iconView: View = if (icon != null && !isAddTile) {
             ImageView(this).apply {
                 layoutParams = LinearLayout.LayoutParams(iconSize, iconSize)
-                scaleType = ImageView.ScaleType.CENTER_CROP
+                scaleType = ImageView.ScaleType.CENTER_INSIDE
                 background = circleDrawable(0xFFEEEEEE.toInt())
                 clipToOutline = true
                 setPadding(dp(6), dp(6), dp(6), dp(6))
@@ -430,9 +435,42 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // ScrollView içinde standart uzun-basma algılayıcısı en ufak kaydırma
+        // titremesinde iptal olabiliyor; bu yüzden kendi toleranslı algılayıcımızı kuruyoruz.
         if (!isAddTile && url != null) {
-            container.setOnLongClickListener {
+            var longPressFired = false
+            var downX = 0f
+            var downY = 0f
+            val moveTolerance = dp(20)
+            val longPressRunnable = Runnable {
+                longPressFired = true
                 showDeleteBookmarkDialog(title, url)
+            }
+            container.setOnTouchListener { touchedView, event ->
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        longPressFired = false
+                        downX = event.x
+                        downY = event.y
+                        longPressHandler.postDelayed(longPressRunnable, 500)
+                    }
+                    MotionEvent.ACTION_MOVE -> {
+                        if (kotlin.math.abs(event.x - downX) > moveTolerance ||
+                            kotlin.math.abs(event.y - downY) > moveTolerance
+                        ) {
+                            longPressHandler.removeCallbacks(longPressRunnable)
+                        }
+                    }
+                    MotionEvent.ACTION_UP -> {
+                        longPressHandler.removeCallbacks(longPressRunnable)
+                        if (!longPressFired) {
+                            touchedView.performClick()
+                        }
+                    }
+                    MotionEvent.ACTION_CANCEL -> {
+                        longPressHandler.removeCallbacks(longPressRunnable)
+                    }
+                }
                 true
             }
         }
