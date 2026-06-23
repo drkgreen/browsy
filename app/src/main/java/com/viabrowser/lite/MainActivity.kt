@@ -392,10 +392,9 @@ class MainActivity : AppCompatActivity() {
         val iconView: View = if (icon != null && !isAddTile) {
             ImageView(this).apply {
                 layoutParams = LinearLayout.LayoutParams(iconSize, iconSize)
-                scaleType = ImageView.ScaleType.CENTER_INSIDE
+                scaleType = ImageView.ScaleType.CENTER_CROP
                 background = circleDrawable(0xFFEEEEEE.toInt())
                 clipToOutline = true
-                setPadding(dp(6), dp(6), dp(6), dp(6))
                 setImageBitmap(icon)
             }
         } else {
