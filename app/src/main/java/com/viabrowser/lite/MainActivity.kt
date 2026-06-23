@@ -393,7 +393,7 @@ class MainActivity : AppCompatActivity() {
             ImageView(this).apply {
                 layoutParams = LinearLayout.LayoutParams(iconSize, iconSize)
                 scaleType = ImageView.ScaleType.CENTER_CROP
-                background = circleDrawable(0xFFEEEEEE.toInt())
+                background = circleDrawable(Color.TRANSPARENT)
                 clipToOutline = true
                 setImageBitmap(icon)
             }
