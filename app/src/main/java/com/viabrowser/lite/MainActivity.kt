@@ -71,6 +71,8 @@ data class SitePermission(val host: String, val type: String, var decision: Stri
 
 data class DownloadRecord(val fileName: String, val url: String, val timestamp: Long)
 
+data class HistoryEntry(val title: String, val url: String, val timestamp: Long)
+
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
@@ -279,6 +281,125 @@ class MainActivity : AppCompatActivity() {
         return row
     }
 
+    // ---- Geçmiş ----
+
+    private fun loadHistory(): MutableList<HistoryEntry> {
+        val raw = getSharedPreferences("via_lite_prefs", MODE_PRIVATE).getString("history", "") ?: ""
+        if (raw.isBlank()) return mutableListOf()
+        return raw.split("\n").mapNotNull { line ->
+            val parts = line.split("::")
+            if (parts.size == 3) HistoryEntry(parts[0], parts[1], parts[2].toLongOrNull() ?: 0L) else null
+        }.toMutableList()
+    }
+
+    private fun saveHistory(list: List<HistoryEntry>) {
+        val raw = list.joinToString("\n") { "${it.title}::${it.url}::${it.timestamp}" }
+        getSharedPreferences("via_lite_prefs", MODE_PRIVATE).edit().putString("history", raw).apply()
+    }
+
+    private fun addHistoryEntry(title: String, url: String) {
+        val list = loadHistory()
+        list.add(0, HistoryEntry(title, url, System.currentTimeMillis()))
+        // Listeyi gereksiz büyümesin diye en fazla 200 kayıtla sınırlıyoruz.
+        while (list.size > 200) {
+            list.removeAt(list.size - 1)
+        }
+        saveHistory(list)
+    }
+
+    private fun clearHistory() {
+        getSharedPreferences("via_lite_prefs", MODE_PRIVATE).edit().remove("history").apply()
+    }
+
+    private fun showHistoryList() {
+        val list = loadHistory()
+        val dialog = BottomSheetDialog(this)
+        val rootColumn = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+
+        val clearRow = TextView(this).apply {
+            text = "Geçmişi Temizle"
+            textSize = 14f
+            setTextColor(0xFFD32F2F.toInt())
+            setPadding(dp(16), dp(14), dp(16), dp(14))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                clearHistory()
+                dialog.dismiss()
+                Toast.makeText(this@MainActivity, "Geçmiş temizlendi", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        val scrollView = android.widget.ScrollView(this)
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(8), dp(8), dp(8), dp(16))
+        }
+        scrollView.addView(container)
+
+        if (list.isEmpty()) {
+            container.addView(
+                TextView(this).apply {
+                    text = "Geçmiş boş"
+                    setPadding(dp(16), dp(16), dp(16), dp(16))
+                    setTextColor(0xFF8E8E93.toInt())
+                }
+            )
+        } else {
+            list.forEach { entry ->
+                container.addView(buildHistoryRow(entry, dialog))
+            }
+        }
+
+        if (list.isNotEmpty()) {
+            rootColumn.addView(clearRow)
+            rootColumn.addView(
+                View(this).apply {
+                    layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1))
+                    setBackgroundColor(0xFFEEEEEE.toInt())
+                }
+            )
+        }
+        rootColumn.addView(scrollView)
+
+        dialog.setContentView(rootColumn)
+        dialog.show()
+    }
+
+    private fun buildHistoryRow(entry: HistoryEntry, dialog: BottomSheetDialog): View {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                dialog.dismiss()
+                showBrowser()
+                binding.webView.loadUrl(entry.url)
+            }
+        }
+        row.addView(
+            TextView(this).apply {
+                text = entry.title
+                textSize = 15f
+                maxLines = 1
+                ellipsize = TextUtils.TruncateAt.END
+                setTextColor(0xFF1A1A1A.toInt())
+            }
+        )
+        row.addView(
+            TextView(this).apply {
+                text = formatDownloadTimestamp(entry.timestamp)
+                textSize = 12f
+                setTextColor(0xFF8E8E93.toInt())
+                setPadding(0, dp(2), 0, 0)
+            }
+        )
+        return row
+    }
+
     // ---- Site izinleri (kamera / mikrofon / konum) ----
 
     private fun resourceToType(resource: String): String? = when (resource) {
@@ -477,6 +598,7 @@ class MainActivity : AppCompatActivity() {
                 if (!binding.editUrl.hasFocus()) {
                     binding.editUrl.setText(view.title?.takeIf { it.isNotBlank() } ?: url)
                 }
+                addHistoryEntry(view.title?.takeIf { it.isNotBlank() } ?: url, url)
                 binding.swipeRefresh.isRefreshing = false
                 scrollAnchorY = 0
                 lastScrollDirection = 0
@@ -784,6 +906,18 @@ class MainActivity : AppCompatActivity() {
             ) {
                 dialog.dismiss()
                 showDownloadsList()
+            }
+        )
+
+        container.addView(
+            buildFunctionMenuCard(
+                iconRes = R.drawable.ic_history,
+                label = "Geçmiş",
+                statusText = null,
+                isActive = false
+            ) {
+                dialog.dismiss()
+                showHistoryList()
             }
         )
 
