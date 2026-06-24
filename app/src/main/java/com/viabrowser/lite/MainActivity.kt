@@ -181,13 +181,13 @@ class MainActivity : AppCompatActivity() {
                     lastScrollDirection = direction
                 }
 
-                val threshold = webView.height / 2
+                val threshold = dp(100)
                 val cumulativeDelta = scrollY - scrollAnchorY
 
-                if (threshold > 0 && cumulativeDelta > threshold) {
+                if (cumulativeDelta > threshold) {
                     pendingBarsHidden = true
                     scrollAnchorY = scrollY
-                } else if (threshold > 0 && cumulativeDelta < -threshold) {
+                } else if (cumulativeDelta < -threshold) {
                     pendingBarsHidden = false
                     scrollAnchorY = scrollY
                 }
