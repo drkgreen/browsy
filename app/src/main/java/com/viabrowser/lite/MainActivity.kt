@@ -45,11 +45,23 @@ import java.net.URLEncoder
 
 data class BookmarkItem(val title: String, val url: String, var icon: Bitmap? = null)
 
+data class TabInfo(
+    val id: Long,
+    var title: String = "Yeni Sekme",
+    var url: String? = null,
+    var favicon: Bitmap? = null,
+    var webViewState: Bundle? = null
+)
+
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
 
     private val bookmarks = mutableListOf<BookmarkItem>()
+
+    private val tabs = mutableListOf<TabInfo>()
+    private var currentTabIndex = 0
+    private var nextTabId = 1L
 
     private val longPressHandler = Handler(Looper.getMainLooper())
 
@@ -106,7 +118,10 @@ class MainActivity : AppCompatActivity() {
 
         loadBookmarks()
         refreshBookmarksGrid()
-        showHomeScreen()
+
+        tabs.add(TabInfo(id = nextTabId++))
+        currentTabIndex = 0
+        restoreCurrentTab()
     }
 
     private fun setupWebView() {
@@ -142,6 +157,7 @@ class MainActivity : AppCompatActivity() {
 
             override fun onPageFinished(view: WebView, url: String) {
                 super.onPageFinished(view, url)
+                currentTab().url = url
                 if (!binding.editUrl.hasFocus()) {
                     binding.editUrl.setText(view.title?.takeIf { it.isNotBlank() } ?: url)
                 }
@@ -163,6 +179,7 @@ class MainActivity : AppCompatActivity() {
 
             override fun onReceivedIcon(view: WebView, icon: Bitmap) {
                 super.onReceivedIcon(view, icon)
+                currentTab().favicon = icon
                 val url = view.url
                 if (url != null) {
                     val item = bookmarks.find { it.url == url }
@@ -176,6 +193,9 @@ class MainActivity : AppCompatActivity() {
 
             override fun onReceivedTitle(view: WebView, title: String) {
                 super.onReceivedTitle(view, title)
+                if (title.isNotBlank()) {
+                    currentTab().title = title
+                }
                 if (!binding.editUrl.hasFocus() && title.isNotBlank()) {
                     binding.editUrl.setText(title)
                 }
@@ -313,7 +333,7 @@ class MainActivity : AppCompatActivity() {
             showHomeScreen()
         }
         binding.btnTabs.setOnClickListener {
-            Toast.makeText(this, "Sekmeler yakında eklenecek", Toast.LENGTH_SHORT).show()
+            showTabSwitcher()
         }
         binding.btnBottomMenu.setOnClickListener { anchor ->
             showBottomMenu(anchor)
@@ -486,6 +506,212 @@ class MainActivity : AppCompatActivity() {
     private fun showBrowser() {
         binding.homeContainer.visibility = View.GONE
         binding.browserRoot.visibility = View.VISIBLE
+    }
+
+    // ---- Sekme yönetimi ----
+
+    private fun currentTab(): TabInfo = tabs[currentTabIndex]
+
+    private fun updateTabCountBadge() {
+        binding.tabCountText.text = tabs.size.toString()
+    }
+
+    private fun saveCurrentTabState() {
+        val tab = currentTab()
+        val bundle = Bundle()
+        binding.webView.saveState(bundle)
+        tab.webViewState = bundle
+        tab.url = binding.webView.url
+        val title = binding.webView.title
+        if (!title.isNullOrBlank()) {
+            tab.title = title
+        }
+    }
+
+    private fun restoreCurrentTab() {
+        val tab = currentTab()
+        val state = tab.webViewState
+        when {
+            state != null -> {
+                binding.webView.restoreState(state)
+                showBrowser()
+            }
+            !tab.url.isNullOrBlank() -> {
+                binding.webView.loadUrl(tab.url!!)
+                showBrowser()
+            }
+            else -> {
+                binding.webView.loadUrl("about:blank")
+                showHomeScreen()
+            }
+        }
+        if (tab.url != null) {
+            binding.editUrl.setText(tab.title.takeIf { it.isNotBlank() } ?: tab.url)
+        } else {
+            binding.editUrl.setText("")
+        }
+        updateTabCountBadge()
+    }
+
+    private fun switchToTab(newIndex: Int) {
+        if (newIndex !in tabs.indices || newIndex == currentTabIndex) return
+        saveCurrentTabState()
+        currentTabIndex = newIndex
+        restoreCurrentTab()
+    }
+
+    private fun addNewTab() {
+        saveCurrentTabState()
+        tabs.add(TabInfo(id = nextTabId++))
+        currentTabIndex = tabs.size - 1
+        restoreCurrentTab()
+    }
+
+    private fun closeTab(index: Int) {
+        if (index !in tabs.indices) return
+
+        if (tabs.size <= 1) {
+            tabs[0] = TabInfo(id = nextTabId++)
+            currentTabIndex = 0
+            restoreCurrentTab()
+            return
+        }
+
+        val wasCurrent = index == currentTabIndex
+        tabs.removeAt(index)
+        if (index < currentTabIndex) {
+            currentTabIndex -= 1
+        } else if (wasCurrent && currentTabIndex >= tabs.size) {
+            currentTabIndex = tabs.size - 1
+        }
+
+        if (wasCurrent) {
+            restoreCurrentTab()
+        } else {
+            updateTabCountBadge()
+        }
+    }
+
+    private fun showTabSwitcher() {
+        saveCurrentTabState()
+
+        val dialog = BottomSheetDialog(this)
+        val scrollView = android.widget.ScrollView(this)
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(8), dp(16), dp(8), dp(16))
+        }
+        scrollView.addView(container)
+
+        tabs.forEachIndexed { index, tab ->
+            container.addView(buildTabRow(tab, index, dialog))
+        }
+        container.addView(buildAddTabRow(dialog))
+
+        dialog.setContentView(scrollView)
+        dialog.show()
+    }
+
+    private fun buildTabRow(tab: TabInfo, index: Int, dialog: BottomSheetDialog): View {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                switchToTab(index)
+                dialog.dismiss()
+            }
+        }
+
+        val iconView: View = if (tab.favicon != null) {
+            ImageView(this).apply {
+                layoutParams = LinearLayout.LayoutParams(dp(36), dp(36))
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                background = circleDrawable(Color.TRANSPARENT)
+                clipToOutline = true
+                setImageBitmap(tab.favicon)
+            }
+        } else {
+            TextView(this).apply {
+                layoutParams = LinearLayout.LayoutParams(dp(36), dp(36))
+                gravity = Gravity.CENTER
+                textSize = 14f
+                setTextColor(Color.WHITE)
+                background = circleDrawable(0xFF9E9E9E.toInt())
+                text = tab.title.firstOrNull()?.uppercase() ?: "?"
+            }
+        }
+
+        val titleView = TextView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                0,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                1f
+            ).apply { marginStart = dp(12) }
+            text = tab.title
+            textSize = 15f
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+            setTextColor(0xFF1A1A1A.toInt())
+        }
+
+        val closeView = ImageView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(36), dp(36))
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+            setImageResource(R.drawable.ic_close)
+            setColorFilter(0xFF8E8E93.toInt())
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                closeTab(index)
+                dialog.dismiss()
+            }
+        }
+
+        row.addView(iconView)
+        row.addView(titleView)
+        row.addView(closeView)
+        return row
+    }
+
+    private fun buildAddTabRow(dialog: BottomSheetDialog): View {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(12), dp(14), dp(12), dp(14))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                addNewTab()
+                dialog.dismiss()
+            }
+        }
+
+        val plusIcon = TextView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(36), dp(36))
+            gravity = Gravity.CENTER
+            textSize = 20f
+            setTextColor(Color.WHITE)
+            background = circleDrawable(0xFF1976D2.toInt())
+            text = "+"
+        }
+
+        val label = TextView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                0,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                1f
+            ).apply { marginStart = dp(12) }
+            text = "Yeni Sekme"
+            textSize = 15f
+            setTextColor(0xFF1A1A1A.toInt())
+        }
+
+        row.addView(plusIcon)
+        row.addView(label)
+        return row
     }
 
     private fun resolveUrl(raw: String): String {
