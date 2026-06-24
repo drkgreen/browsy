@@ -54,6 +54,8 @@ class MainActivity : AppCompatActivity() {
 
     private val scrollHandler = Handler(Looper.getMainLooper())
     private var pendingBarsHidden: Boolean? = null
+    private var scrollAnchorY = 0
+    private var lastScrollDirection = 0
     private val commitBarVisibility = Runnable {
         when (pendingBarsHidden) {
             true -> hideBars()
@@ -126,6 +128,8 @@ class MainActivity : AppCompatActivity() {
                 binding.swipeRefresh.isRefreshing = false
                 scrollHandler.removeCallbacks(commitBarVisibility)
                 pendingBarsHidden = false
+                scrollAnchorY = 0
+                lastScrollDirection = 0
                 showBars()
                 applyThemeColorFromPage()
             }
@@ -166,12 +170,28 @@ class MainActivity : AppCompatActivity() {
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             webView.setOnScrollChangeListener { _, _, scrollY, _, oldScrollY ->
-                val delta = scrollY - oldScrollY
-                if (delta > 10) {
-                    pendingBarsHidden = true
-                } else if (delta < -10) {
-                    pendingBarsHidden = false
+                val direction = when {
+                    scrollY > oldScrollY -> 1
+                    scrollY < oldScrollY -> -1
+                    else -> 0
                 }
+                if (direction != 0 && direction != lastScrollDirection) {
+                    // Yön değişti, kümülatif takibi bu noktadan yeniden başlat.
+                    scrollAnchorY = oldScrollY
+                    lastScrollDirection = direction
+                }
+
+                val threshold = webView.height / 2
+                val cumulativeDelta = scrollY - scrollAnchorY
+
+                if (threshold > 0 && cumulativeDelta > threshold) {
+                    pendingBarsHidden = true
+                    scrollAnchorY = scrollY
+                } else if (threshold > 0 && cumulativeDelta < -threshold) {
+                    pendingBarsHidden = false
+                    scrollAnchorY = scrollY
+                }
+
                 scrollHandler.removeCallbacks(commitBarVisibility)
                 scrollHandler.postDelayed(commitBarVisibility, 150)
             }
