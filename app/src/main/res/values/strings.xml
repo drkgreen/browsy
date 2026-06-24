@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">ViaLite</string>
+    <string name="app_name">Browsy</string>
     <string name="url_hint">URL veya arama yazın</string>
     <string name="back">Geri</string>
     <string name="forward">İleri</string>
@@ -8,5 +8,6 @@
     <string name="tabs">Sekmeler</string>
     <string name="close">Kapat</string>
     <string name="search_hint">Ara veya adres yazın</string>
-    <string name="menu">Diğer seçenekler</string>
+    <string name="menu">Menü</string>
+    <string name="add_to_favorites">Favorilere Ekle</string>
 </resources>
