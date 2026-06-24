@@ -8,10 +8,10 @@
         android:fillColor="@android:color/transparent"
         android:strokeColor="#000000"
         android:strokeWidth="2"
-        android:pathData="M5,13A7,7 0 1,0 19,13A7,7 0 1,0 5,13Z" />
+        android:pathData="M5,14A7,7 0 1,0 19,14A7,7 0 1,0 5,14Z" />
     <path
         android:fillColor="@android:color/transparent"
         android:strokeColor="#000000"
         android:strokeWidth="2"
-        android:pathData="M12,2L12,9" />
+        android:pathData="M12,3L12,10" />
 </vector>
