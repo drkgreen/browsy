@@ -166,16 +166,34 @@
                 android:padding="12dp"
                 android:src="@drawable/ic_home" />
 
-            <ImageButton
+            <FrameLayout
                 android:id="@+id/btnTabs"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="@string/tabs"
-                android:scaleType="centerInside"
-                android:padding="12dp"
-                android:src="@drawable/ic_tabs" />
+                android:contentDescription="@string/tabs">
+
+                <ImageView
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:padding="14dp"
+                    android:importantForAccessibility="no"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_tab_square" />
+
+                <TextView
+                    android:id="@+id/tabCountText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:includeFontPadding="false"
+                    android:text="1"
+                    android:textColor="#3C3C43"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+
+            </FrameLayout>
 
             <ImageButton
                 android:id="@+id/btnBottomMenu"
