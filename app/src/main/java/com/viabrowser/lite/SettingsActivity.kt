@@ -185,7 +185,7 @@ class SettingsActivity : AppCompatActivity() {
             hint = "https://..."
             inputType = InputType.TYPE_TEXT_VARIATION_URI
             setText(getCustomStartUrl())
-            setPadding(0, dp(24), 0, 0)
+            setPadding(0, dp(16), 0, dp(20))
         }
 
         container.addView(radioGroup)
