@@ -1,5 +1,7 @@
 package com.viabrowser.lite
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
@@ -20,10 +22,14 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
+import android.webkit.CookieManager
+import android.webkit.GeolocationPermissions
+import android.webkit.PermissionRequest
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
+import android.webkit.WebStorage
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.EditText
@@ -35,6 +41,8 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewFeature
 import com.google.android.material.bottomsheet.BottomSheetDialog
@@ -56,6 +64,8 @@ data class TabInfo(
     var webViewState: Bundle? = null
 )
 
+data class SitePermission(val host: String, val type: String, var decision: String)
+
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
@@ -65,6 +75,15 @@ class MainActivity : AppCompatActivity() {
     private val tabs = mutableListOf<TabInfo>()
     private var currentTabIndex = 0
     private var nextTabId = 1L
+
+    private var pendingWebPermissionRequest: PermissionRequest? = null
+    private var pendingGeoPermissionCallback: GeolocationPermissions.Callback? = null
+    private var pendingGeoPermissionOrigin: String? = null
+
+    companion object {
+        private const val REQUEST_CODE_CAMERA_MIC = 1001
+        private const val REQUEST_CODE_LOCATION = 1002
+    }
 
     private val longPressHandler = Handler(Looper.getMainLooper())
 
@@ -130,6 +149,165 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         applyAppearanceSettings()
+        applyCookieSettings()
+        consumePendingCacheClear()
+    }
+
+    private fun consumePendingCacheClear() {
+        val prefs = getSharedPreferences("via_lite_prefs", MODE_PRIVATE)
+        if (prefs.getBoolean("pending_clear_cache", false)) {
+            binding.webView.clearCache(true)
+            binding.webView.clearHistory()
+            prefs.edit().putBoolean("pending_clear_cache", false).apply()
+        }
+    }
+
+    private fun applyCookieSettings() {
+        val blockThirdParty = getSharedPreferences("via_lite_prefs", MODE_PRIVATE)
+            .getBoolean("block_third_party_cookies", false)
+        CookieManager.getInstance().setAcceptThirdPartyCookies(binding.webView, !blockThirdParty)
+    }
+
+    // ---- Site izinleri (kamera / mikrofon / konum) ----
+
+    private fun resourceToType(resource: String): String? = when (resource) {
+        PermissionRequest.RESOURCE_VIDEO_CAPTURE -> "camera"
+        PermissionRequest.RESOURCE_AUDIO_CAPTURE -> "microphone"
+        else -> null
+    }
+
+    private fun androidPermissionsFor(type: String): Array<String> = when (type) {
+        "camera" -> arrayOf(Manifest.permission.CAMERA)
+        "microphone" -> arrayOf(Manifest.permission.RECORD_AUDIO)
+        "location" -> arrayOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        )
+        else -> emptyArray()
+    }
+
+    private fun hasAndroidPermission(permission: String): Boolean {
+        return ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun permissionDisplayName(type: String): String = when (type) {
+        "camera" -> "kamera"
+        "microphone" -> "mikrofon"
+        "location" -> "konum"
+        else -> type
+    }
+
+    private fun showSitePermissionDialog(host: String, types: List<String>, request: PermissionRequest) {
+        val typeNames = types.joinToString(" ve ") { permissionDisplayName(it) }
+        AlertDialog.Builder(this)
+            .setTitle("İzin İsteği")
+            .setMessage("$host, $typeNames erişimi istiyor. İzin verilsin mi?")
+            .setPositiveButton("İzin Ver") { _, _ ->
+                types.forEach { setSitePermissionDecision(host, it, "allow") }
+                resolveWebPermissionRequest(host, request)
+            }
+            .setNegativeButton("Reddet") { _, _ ->
+                types.forEach { setSitePermissionDecision(host, it, "deny") }
+                request.deny()
+            }
+            .setCancelable(false)
+            .show()
+    }
+
+    private fun resolveWebPermissionRequest(host: String, request: PermissionRequest) {
+        val granted = mutableListOf<String>()
+        for (resource in request.resources) {
+            val type = resourceToType(resource) ?: continue
+            val decision = getSitePermissionDecision(host, type)
+            if (decision == "allow") {
+                val androidPerms = androidPermissionsFor(type)
+                if (androidPerms.all { hasAndroidPermission(it) }) {
+                    granted.add(resource)
+                } else {
+                    pendingWebPermissionRequest = request
+                    ActivityCompat.requestPermissions(this, androidPerms, REQUEST_CODE_CAMERA_MIC)
+                    return
+                }
+            }
+        }
+        if (granted.isNotEmpty()) {
+            request.grant(granted.toTypedArray())
+        } else {
+            request.deny()
+        }
+    }
+
+    private fun resolveGeoPermission(origin: String, callback: GeolocationPermissions.Callback) {
+        val host = Uri.parse(origin).host ?: origin
+        val decision = getSitePermissionDecision(host, "location")
+        if (decision == "allow") {
+            val androidPerms = androidPermissionsFor("location")
+            if (androidPerms.any { hasAndroidPermission(it) }) {
+                callback.invoke(origin, true, false)
+            } else {
+                pendingGeoPermissionCallback = callback
+                pendingGeoPermissionOrigin = origin
+                ActivityCompat.requestPermissions(this, androidPerms, REQUEST_CODE_LOCATION)
+            }
+        } else {
+            callback.invoke(origin, false, false)
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        when (requestCode) {
+            REQUEST_CODE_CAMERA_MIC -> {
+                val request = pendingWebPermissionRequest
+                pendingWebPermissionRequest = null
+                if (request != null) {
+                    val host = Uri.parse(request.origin.toString()).host ?: request.origin.toString()
+                    resolveWebPermissionRequest(host, request)
+                }
+            }
+            REQUEST_CODE_LOCATION -> {
+                val callback = pendingGeoPermissionCallback
+                val origin = pendingGeoPermissionOrigin
+                pendingGeoPermissionCallback = null
+                pendingGeoPermissionOrigin = null
+                if (callback != null && origin != null) {
+                    resolveGeoPermission(origin, callback)
+                }
+            }
+        }
+    }
+
+    private fun loadSitePermissions(): MutableList<SitePermission> {
+        val raw = getSharedPreferences("via_lite_prefs", MODE_PRIVATE).getString("site_permissions", "") ?: ""
+        if (raw.isBlank()) return mutableListOf()
+        return raw.split("\n").mapNotNull { line ->
+            val parts = line.split("::")
+            if (parts.size == 3) SitePermission(parts[0], parts[1], parts[2]) else null
+        }.toMutableList()
+    }
+
+    private fun saveSitePermissions(list: List<SitePermission>) {
+        val raw = list.joinToString("\n") { "${it.host}::${it.type}::${it.decision}" }
+        getSharedPreferences("via_lite_prefs", MODE_PRIVATE).edit().putString("site_permissions", raw).apply()
+    }
+
+    private fun getSitePermissionDecision(host: String, type: String): String? {
+        return loadSitePermissions().find { it.host == host && it.type == type }?.decision
+    }
+
+    private fun setSitePermissionDecision(host: String, type: String, decision: String) {
+        val list = loadSitePermissions()
+        val existing = list.find { it.host == host && it.type == type }
+        if (existing != null) {
+            existing.decision = decision
+        } else {
+            list.add(SitePermission(host, type, decision))
+        }
+        saveSitePermissions(list)
     }
 
     private fun applyAppearanceSettings() {
@@ -154,9 +332,11 @@ class MainActivity : AppCompatActivity() {
             builtInZoomControls = true
             displayZoomControls = false
             mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+            setGeolocationEnabled(true)
         }
 
         applyAppearanceSettings()
+        applyCookieSettings()
 
         webView.webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(
@@ -219,6 +399,50 @@ class MainActivity : AppCompatActivity() {
                 }
                 if (!binding.editUrl.hasFocus() && title.isNotBlank()) {
                     binding.editUrl.setText(title)
+                }
+            }
+
+            override fun onPermissionRequest(request: PermissionRequest) {
+                runOnUiThread {
+                    val host = Uri.parse(request.origin.toString()).host ?: request.origin.toString()
+                    val types = request.resources.mapNotNull { resourceToType(it) }
+                    if (types.isEmpty()) {
+                        request.deny()
+                        return@runOnUiThread
+                    }
+                    val undecided = types.filter { getSitePermissionDecision(host, it) == null }
+                    if (undecided.isNotEmpty()) {
+                        showSitePermissionDialog(host, undecided, request)
+                    } else {
+                        resolveWebPermissionRequest(host, request)
+                    }
+                }
+            }
+
+            override fun onGeolocationPermissionsShowPrompt(
+                origin: String,
+                callback: GeolocationPermissions.Callback
+            ) {
+                runOnUiThread {
+                    val host = Uri.parse(origin).host ?: origin
+                    val decision = getSitePermissionDecision(host, "location")
+                    if (decision == null) {
+                        AlertDialog.Builder(this@MainActivity)
+                            .setTitle("Konum İzni")
+                            .setMessage("$host, konumunuza erişmek istiyor. İzin verilsin mi?")
+                            .setPositiveButton("İzin Ver") { _, _ ->
+                                setSitePermissionDecision(host, "location", "allow")
+                                resolveGeoPermission(origin, callback)
+                            }
+                            .setNegativeButton("Reddet") { _, _ ->
+                                setSitePermissionDecision(host, "location", "deny")
+                                callback.invoke(origin, false, false)
+                            }
+                            .setCancelable(false)
+                            .show()
+                    } else {
+                        resolveGeoPermission(origin, callback)
+                    }
                 }
             }
         }
