@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/menu_toggle_adblock"
+        android:title="Reklam Engelleme: Açık" />
+    <item
+        android:id="@+id/menu_close_app"
+        android:title="Kapat" />
+</menu>
