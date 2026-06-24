@@ -1,6 +1,7 @@
 package com.viabrowser.lite
 
 import android.Manifest
+import android.app.DownloadManager
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -11,6 +12,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.text.InputType
@@ -25,6 +27,7 @@ import android.view.inputmethod.InputMethodManager
 import android.webkit.CookieManager
 import android.webkit.GeolocationPermissions
 import android.webkit.PermissionRequest
+import android.webkit.URLUtil
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -65,6 +68,8 @@ data class TabInfo(
 )
 
 data class SitePermission(val host: String, val type: String, var decision: String)
+
+data class DownloadRecord(val fileName: String, val url: String, val timestamp: Long)
 
 class MainActivity : AppCompatActivity() {
 
@@ -166,6 +171,112 @@ class MainActivity : AppCompatActivity() {
         val blockThirdParty = getSharedPreferences("via_lite_prefs", MODE_PRIVATE)
             .getBoolean("block_third_party_cookies", false)
         CookieManager.getInstance().setAcceptThirdPartyCookies(binding.webView, !blockThirdParty)
+    }
+
+    // ---- Dosya indirme ----
+
+    private fun startFileDownload(url: String, userAgent: String, contentDisposition: String, mimeType: String) {
+        try {
+            val fileName = URLUtil.guessFileName(url, contentDisposition, mimeType)
+            val request = DownloadManager.Request(Uri.parse(url)).apply {
+                setMimeType(mimeType)
+                addRequestHeader("User-Agent", userAgent)
+                setTitle(fileName)
+                setDescription("İndiriliyor...")
+                setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
+            }
+            val downloadManager = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+            downloadManager.enqueue(request)
+            addDownloadRecord(fileName, url)
+            Toast.makeText(this, "İndiriliyor: $fileName", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "İndirme başlatılamadı", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun loadDownloads(): MutableList<DownloadRecord> {
+        val raw = getSharedPreferences("via_lite_prefs", MODE_PRIVATE).getString("downloads", "") ?: ""
+        if (raw.isBlank()) return mutableListOf()
+        return raw.split("\n").mapNotNull { line ->
+            val parts = line.split("::")
+            if (parts.size == 3) DownloadRecord(parts[0], parts[1], parts[2].toLongOrNull() ?: 0L) else null
+        }.toMutableList()
+    }
+
+    private fun saveDownloads(list: List<DownloadRecord>) {
+        val raw = list.joinToString("\n") { "${it.fileName}::${it.url}::${it.timestamp}" }
+        getSharedPreferences("via_lite_prefs", MODE_PRIVATE).edit().putString("downloads", raw).apply()
+    }
+
+    private fun addDownloadRecord(fileName: String, url: String) {
+        val list = loadDownloads()
+        list.add(0, DownloadRecord(fileName, url, System.currentTimeMillis()))
+        saveDownloads(list)
+    }
+
+    private fun formatDownloadTimestamp(ts: Long): String {
+        val fmt = java.text.SimpleDateFormat("dd MMM, HH:mm", java.util.Locale("tr"))
+        return fmt.format(java.util.Date(ts))
+    }
+
+    private fun showDownloadsList() {
+        val list = loadDownloads()
+        val dialog = BottomSheetDialog(this)
+        val scrollView = android.widget.ScrollView(this)
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(8), dp(16), dp(8), dp(16))
+        }
+        scrollView.addView(container)
+
+        if (list.isEmpty()) {
+            container.addView(
+                TextView(this).apply {
+                    text = "Henüz indirilen dosya yok"
+                    setPadding(dp(16), dp(16), dp(16), dp(16))
+                    setTextColor(0xFF8E8E93.toInt())
+                }
+            )
+        } else {
+            list.forEach { item ->
+                container.addView(buildDownloadRow(item))
+                container.addView(
+                    View(this).apply {
+                        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1))
+                        setBackgroundColor(0xFFEEEEEE.toInt())
+                    }
+                )
+            }
+        }
+
+        dialog.setContentView(scrollView)
+        dialog.show()
+    }
+
+    private fun buildDownloadRow(item: DownloadRecord): View {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+        }
+        row.addView(
+            TextView(this).apply {
+                text = item.fileName
+                textSize = 15f
+                maxLines = 1
+                ellipsize = TextUtils.TruncateAt.END
+                setTextColor(0xFF1A1A1A.toInt())
+            }
+        )
+        row.addView(
+            TextView(this).apply {
+                text = formatDownloadTimestamp(item.timestamp)
+                textSize = 12f
+                setTextColor(0xFF8E8E93.toInt())
+                setPadding(0, dp(2), 0, 0)
+            }
+        )
+        return row
     }
 
     // ---- Site izinleri (kamera / mikrofon / konum) ----
@@ -337,6 +448,10 @@ class MainActivity : AppCompatActivity() {
 
         applyAppearanceSettings()
         applyCookieSettings()
+
+        webView.setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
+            startFileDownload(url, userAgent, contentDisposition, mimeType)
+        }
 
         webView.webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(
@@ -657,6 +772,18 @@ class MainActivity : AppCompatActivity() {
             ) {
                 dialog.dismiss()
                 startActivity(Intent(this, SettingsActivity::class.java))
+            }
+        )
+
+        container.addView(
+            buildFunctionMenuCard(
+                iconRes = R.drawable.ic_download,
+                label = "İndirilenler",
+                statusText = null,
+                isActive = false
+            ) {
+                dialog.dismiss()
+                showDownloadsList()
             }
         )
 
