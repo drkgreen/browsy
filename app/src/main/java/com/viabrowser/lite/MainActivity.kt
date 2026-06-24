@@ -52,6 +52,16 @@ class MainActivity : AppCompatActivity() {
 
     private val longPressHandler = Handler(Looper.getMainLooper())
 
+    private val scrollHandler = Handler(Looper.getMainLooper())
+    private var pendingBarsHidden: Boolean? = null
+    private val commitBarVisibility = Runnable {
+        when (pendingBarsHidden) {
+            true -> hideBars()
+            false -> showBars()
+            null -> {}
+        }
+    }
+
     private val adHosts = setOf(
         "doubleclick.net",
         "googlesyndication.com",
@@ -114,6 +124,8 @@ class MainActivity : AppCompatActivity() {
                     binding.editUrl.setText(view.title?.takeIf { it.isNotBlank() } ?: url)
                 }
                 binding.swipeRefresh.isRefreshing = false
+                scrollHandler.removeCallbacks(commitBarVisibility)
+                pendingBarsHidden = false
                 showBars()
                 applyThemeColorFromPage()
             }
@@ -156,10 +168,12 @@ class MainActivity : AppCompatActivity() {
             webView.setOnScrollChangeListener { _, _, scrollY, _, oldScrollY ->
                 val delta = scrollY - oldScrollY
                 if (delta > 10) {
-                    hideBars()
+                    pendingBarsHidden = true
                 } else if (delta < -10) {
-                    showBars()
+                    pendingBarsHidden = false
                 }
+                scrollHandler.removeCallbacks(commitBarVisibility)
+                scrollHandler.postDelayed(commitBarVisibility, 150)
             }
         }
     }
