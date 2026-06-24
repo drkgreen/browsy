@@ -185,7 +185,7 @@ class SettingsActivity : AppCompatActivity() {
             hint = "https://..."
             inputType = InputType.TYPE_TEXT_VARIATION_URI
             setText(getCustomStartUrl())
-            setPadding(0, dp(8), 0, 0)
+            setPadding(0, dp(24), 0, 0)
         }
 
         container.addView(radioGroup)
@@ -269,7 +269,10 @@ class SettingsActivity : AppCompatActivity() {
             "Karanlık modu desteklemeyen sitelerde de karanlık görünüm uygular",
             isForceDarkEnabled()
         ) { checked ->
-            prefs().edit().putBoolean("force_dark_web", checked).apply()
+            prefs().edit()
+                .putBoolean("force_dark_web", checked)
+                .putBoolean("pending_appearance_reload", true)
+                .apply()
         }
     }
 
@@ -339,25 +342,48 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun showClearDataConfirmation() {
+        val options = arrayOf("Geçmiş", "Çerezler", "Önbellek", "Site Verileri (depolama)")
+        val checkedItems = booleanArrayOf(true, true, true, true)
+
         AlertDialog.Builder(this)
             .setTitle("Verileri Temizle")
-            .setMessage("Geçmiş, çerezler, önbellek ve site depolama verileri silinecek. Onaylıyor musunuz?")
+            .setMultiChoiceItems(options, checkedItems) { _, which, isChecked ->
+                checkedItems[which] = isChecked
+            }
             .setPositiveButton("Temizle") { _, _ ->
-                clearBrowsingData()
-                Toast.makeText(this, "Veriler temizlendi", Toast.LENGTH_SHORT).show()
+                clearBrowsingData(
+                    clearHistory = checkedItems[0],
+                    clearCookies = checkedItems[1],
+                    clearCache = checkedItems[2],
+                    clearSiteData = checkedItems[3]
+                )
+                Toast.makeText(this, "Seçilen veriler temizlendi", Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("Vazgeç", null)
             .show()
     }
 
-    private fun clearBrowsingData() {
-        CookieManager.getInstance().removeAllCookies(null)
-        CookieManager.getInstance().flush()
-        android.webkit.WebStorage.getInstance().deleteAllData()
-        prefs().edit().remove("history").apply()
-        // WebView örneği MainActivity'de olduğu için önbellek temizliğini
-        // bir bayrakla işaretliyoruz; MainActivity onResume'da bunu görüp uygular.
-        prefs().edit().putBoolean("pending_clear_cache", true).apply()
+    private fun clearBrowsingData(
+        clearHistory: Boolean,
+        clearCookies: Boolean,
+        clearCache: Boolean,
+        clearSiteData: Boolean
+    ) {
+        if (clearCookies) {
+            CookieManager.getInstance().removeAllCookies(null)
+            CookieManager.getInstance().flush()
+        }
+        if (clearSiteData) {
+            android.webkit.WebStorage.getInstance().deleteAllData()
+        }
+        if (clearHistory) {
+            prefs().edit().remove("history").apply()
+        }
+        if (clearCache) {
+            // WebView örneği MainActivity'de olduğu için önbellek temizliğini
+            // bir bayrakla işaretliyoruz; MainActivity onResume'da bunu görüp uygular.
+            prefs().edit().putBoolean("pending_clear_cache", true).apply()
+        }
     }
 
     // ---- Üçüncü taraf çerezleri ----
