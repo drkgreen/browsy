@@ -333,7 +333,7 @@ class SettingsActivity : AppCompatActivity() {
     // ---- Verileri temizleme ----
 
     private fun buildClearDataRow(): View {
-        return buildSettingsRow("Verileri Temizle", "Çerezler, önbellek ve site verileri") {
+        return buildSettingsRow("Verileri Temizle", "Geçmiş, çerezler, önbellek ve site verileri") {
             showClearDataConfirmation()
         }
     }
@@ -341,7 +341,7 @@ class SettingsActivity : AppCompatActivity() {
     private fun showClearDataConfirmation() {
         AlertDialog.Builder(this)
             .setTitle("Verileri Temizle")
-            .setMessage("Çerezler, önbellek ve site depolama verileri silinecek. Onaylıyor musunuz?")
+            .setMessage("Geçmiş, çerezler, önbellek ve site depolama verileri silinecek. Onaylıyor musunuz?")
             .setPositiveButton("Temizle") { _, _ ->
                 clearBrowsingData()
                 Toast.makeText(this, "Veriler temizlendi", Toast.LENGTH_SHORT).show()
@@ -354,6 +354,7 @@ class SettingsActivity : AppCompatActivity() {
         CookieManager.getInstance().removeAllCookies(null)
         CookieManager.getInstance().flush()
         android.webkit.WebStorage.getInstance().deleteAllData()
+        prefs().edit().remove("history").apply()
         // WebView örneği MainActivity'de olduğu için önbellek temizliğini
         // bir bayrakla işaretliyoruz; MainActivity onResume'da bunu görüp uygular.
         prefs().edit().putBoolean("pending_clear_cache", true).apply()
