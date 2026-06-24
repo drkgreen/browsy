@@ -9,16 +9,19 @@ import android.text.InputType
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
+import android.webkit.CookieManager
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.RadioButton
 import android.widget.RadioGroup
+import android.widget.ScrollView
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.viabrowser.lite.databinding.ActivitySettingsBinding
 
 class SettingsActivity : AppCompatActivity() {
@@ -58,6 +61,13 @@ class SettingsActivity : AppCompatActivity() {
         binding.settingsContainer.addView(buildForceDarkRow())
         binding.settingsContainer.addView(buildDivider())
         binding.settingsContainer.addView(buildTextZoomRow())
+
+        binding.settingsContainer.addView(buildSectionHeader("Gizlilik ve Güvenlik"))
+        binding.settingsContainer.addView(buildClearDataRow())
+        binding.settingsContainer.addView(buildDivider())
+        binding.settingsContainer.addView(buildThirdPartyCookiesRow())
+        binding.settingsContainer.addView(buildDivider())
+        binding.settingsContainer.addView(buildSitePermissionsRow())
     }
 
     private fun buildSectionHeader(text: String): View {
@@ -318,5 +328,158 @@ class SettingsActivity : AppCompatActivity() {
                 Toast.makeText(this, "Sistem ayarları açılamadı", Toast.LENGTH_SHORT).show()
             }
         }
+    }
+
+    // ---- Verileri temizleme ----
+
+    private fun buildClearDataRow(): View {
+        return buildSettingsRow("Verileri Temizle", "Çerezler, önbellek ve site verileri") {
+            showClearDataConfirmation()
+        }
+    }
+
+    private fun showClearDataConfirmation() {
+        AlertDialog.Builder(this)
+            .setTitle("Verileri Temizle")
+            .setMessage("Çerezler, önbellek ve site depolama verileri silinecek. Onaylıyor musunuz?")
+            .setPositiveButton("Temizle") { _, _ ->
+                clearBrowsingData()
+                Toast.makeText(this, "Veriler temizlendi", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Vazgeç", null)
+            .show()
+    }
+
+    private fun clearBrowsingData() {
+        CookieManager.getInstance().removeAllCookies(null)
+        CookieManager.getInstance().flush()
+        android.webkit.WebStorage.getInstance().deleteAllData()
+        // WebView örneği MainActivity'de olduğu için önbellek temizliğini
+        // bir bayrakla işaretliyoruz; MainActivity onResume'da bunu görüp uygular.
+        prefs().edit().putBoolean("pending_clear_cache", true).apply()
+    }
+
+    // ---- Üçüncü taraf çerezleri ----
+
+    private fun isThirdPartyCookiesBlocked(): Boolean = prefs().getBoolean("block_third_party_cookies", false)
+
+    private fun buildThirdPartyCookiesRow(): View {
+        return buildSwitchRow(
+            "Üçüncü Taraf Çerezlerini Engelle",
+            "Farklı sitelerin sizi takip etmesini sınırlar",
+            isThirdPartyCookiesBlocked()
+        ) { checked ->
+            prefs().edit().putBoolean("block_third_party_cookies", checked).apply()
+        }
+    }
+
+    // ---- Site izinleri ----
+
+    private fun buildSitePermissionsRow(): View {
+        return buildSettingsRow("Site İzinleri", "Kamera, mikrofon, konum") {
+            showSitePermissionsList()
+        }
+    }
+
+    private fun loadSitePermissions(): MutableList<SitePermission> {
+        val raw = prefs().getString("site_permissions", "") ?: ""
+        if (raw.isBlank()) return mutableListOf()
+        return raw.split("\n").mapNotNull { line ->
+            val parts = line.split("::")
+            if (parts.size == 3) SitePermission(parts[0], parts[1], parts[2]) else null
+        }.toMutableList()
+    }
+
+    private fun saveSitePermissions(list: List<SitePermission>) {
+        val raw = list.joinToString("\n") { "${it.host}::${it.type}::${it.decision}" }
+        prefs().edit().putString("site_permissions", raw).apply()
+    }
+
+    private fun removeSitePermission(host: String, type: String) {
+        val list = loadSitePermissions()
+        list.removeAll { it.host == host && it.type == type }
+        saveSitePermissions(list)
+    }
+
+    private fun permissionDisplayName(type: String): String = when (type) {
+        "camera" -> "Kamera"
+        "microphone" -> "Mikrofon"
+        "location" -> "Konum"
+        else -> type
+    }
+
+    private fun showSitePermissionsList() {
+        val list = loadSitePermissions()
+        val dialog = BottomSheetDialog(this)
+        val scrollView = ScrollView(this)
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(8), dp(16), dp(8), dp(16))
+        }
+        scrollView.addView(container)
+
+        if (list.isEmpty()) {
+            container.addView(
+                TextView(this).apply {
+                    text = "Henüz bir izin kaydı yok"
+                    setPadding(dp(16), dp(16), dp(16), dp(16))
+                    setTextColor(0xFF8E8E93.toInt())
+                }
+            )
+        } else {
+            list.forEach { perm ->
+                container.addView(buildPermissionEntryRow(perm, dialog))
+            }
+        }
+
+        dialog.setContentView(scrollView)
+        dialog.show()
+    }
+
+    private fun buildPermissionEntryRow(perm: SitePermission, dialog: BottomSheetDialog): View {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+        }
+
+        val textContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        textContainer.addView(
+            TextView(this).apply {
+                text = perm.host
+                textSize = 15f
+                setTextColor(0xFF1A1A1A.toInt())
+            }
+        )
+        textContainer.addView(
+            TextView(this).apply {
+                val statusText = if (perm.decision == "allow") "İzin verildi" else "Reddedildi"
+                text = "${permissionDisplayName(perm.type)} — $statusText"
+                textSize = 13f
+                setTextColor(0xFF8E8E93.toInt())
+                setPadding(0, dp(2), 0, 0)
+            }
+        )
+
+        val removeButton = TextView(this).apply {
+            text = "Kaldır"
+            textSize = 14f
+            setTextColor(0xFF1976D2.toInt())
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                removeSitePermission(perm.host, perm.type)
+                dialog.dismiss()
+                showSitePermissionsList()
+            }
+        }
+
+        row.addView(textContainer)
+        row.addView(removeButton)
+        return row
     }
 }
