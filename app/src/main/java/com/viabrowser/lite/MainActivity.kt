@@ -55,18 +55,45 @@ class MainActivity : AppCompatActivity() {
     private var scrollAnchorY = 0
     private var lastScrollDirection = 0
 
-    private val adHosts = setOf(
-        "doubleclick.net",
-        "googlesyndication.com",
-        "googleadservices.com",
-        "adservice.google.com",
-        "ads.youtube.com",
-        "adnxs.com",
-        "popads.net",
-        "taboola.com",
-        "outbrain.com",
-        "scorecardresearch.com"
-    )
+    private val adBlockHosts: MutableSet<String> by lazy { loadAdBlockHosts() }
+
+    private fun loadAdBlockHosts(): MutableSet<String> {
+        val set = HashSet<String>()
+        try {
+            assets.open("adblock_hosts.txt").bufferedReader(Charsets.UTF_8).useLines { lines ->
+                lines.forEach { line ->
+                    val trimmed = line.trim()
+                    if (trimmed.isNotEmpty() && !trimmed.startsWith("#")) {
+                        set.add(trimmed.lowercase())
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            // liste okunamazsa boş set ile devam et, tarayıcı yine çalışır
+        }
+        return set
+    }
+
+    private fun isAdBlockEnabled(): Boolean {
+        return getSharedPreferences("via_lite_prefs", MODE_PRIVATE).getBoolean("ad_block_enabled", true)
+    }
+
+    private fun setAdBlockEnabled(enabled: Boolean) {
+        getSharedPreferences("via_lite_prefs", MODE_PRIVATE).edit().putBoolean("ad_block_enabled", enabled).apply()
+    }
+
+    private fun isHostBlocked(host: String): Boolean {
+        if (host.isEmpty()) return false
+        if (adBlockHosts.contains(host)) return true
+        // Alt domainler için üst domainleri de kontrol et (örn. pubads.g.doubleclick.net -> doubleclick.net)
+        var idx = host.indexOf('.')
+        while (idx != -1) {
+            val parent = host.substring(idx + 1)
+            if (adBlockHosts.contains(parent)) return true
+            idx = host.indexOf('.', idx + 1)
+        }
+        return false
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -99,14 +126,15 @@ class MainActivity : AppCompatActivity() {
                 view: WebView,
                 request: WebResourceRequest
             ): WebResourceResponse? {
-                val host = request.url.host ?: ""
-                val isAd = adHosts.any { host.endsWith(it) }
-                if (isAd) {
-                    return WebResourceResponse(
-                        "text/plain",
-                        "utf-8",
-                        ByteArrayInputStream(ByteArray(0))
-                    )
+                if (isAdBlockEnabled()) {
+                    val host = request.url.host?.lowercase() ?: ""
+                    if (isHostBlocked(host)) {
+                        return WebResourceResponse(
+                            "text/plain",
+                            "utf-8",
+                            ByteArrayInputStream(ByteArray(0))
+                        )
+                    }
                 }
                 return super.shouldInterceptRequest(view, request)
             }
@@ -286,8 +314,8 @@ class MainActivity : AppCompatActivity() {
         binding.btnTabs.setOnClickListener {
             Toast.makeText(this, "Sekmeler yakında eklenecek", Toast.LENGTH_SHORT).show()
         }
-        binding.btnClose.setOnClickListener {
-            finishAffinity()
+        binding.btnBottomMenu.setOnClickListener { anchor ->
+            showBottomMenu(anchor)
         }
 
         // Açılış ekranı arama kutusu
@@ -317,6 +345,35 @@ class MainActivity : AppCompatActivity() {
                 true
             } else {
                 false
+            }
+        }
+        popup.show()
+    }
+
+    private fun showBottomMenu(anchor: View) {
+        val popup = PopupMenu(this, anchor)
+        popup.menuInflater.inflate(R.menu.bottom_menu, popup.menu)
+
+        val adBlockItem = popup.menu.findItem(R.id.menu_toggle_adblock)
+        adBlockItem.title = if (isAdBlockEnabled()) "Reklam Engelleme: Açık" else "Reklam Engelleme: Kapalı"
+
+        popup.setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                R.id.menu_toggle_adblock -> {
+                    val newState = !isAdBlockEnabled()
+                    setAdBlockEnabled(newState)
+                    Toast.makeText(
+                        this,
+                        if (newState) "Reklam engelleme açıldı" else "Reklam engelleme kapatıldı",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    true
+                }
+                R.id.menu_close_app -> {
+                    finishAffinity()
+                    true
+                }
+                else -> false
             }
         }
         popup.show()
