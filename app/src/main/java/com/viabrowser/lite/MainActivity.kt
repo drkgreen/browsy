@@ -158,6 +158,17 @@ class MainActivity : AppCompatActivity() {
         applyAppearanceSettings()
         applyCookieSettings()
         consumePendingCacheClear()
+        consumePendingAppearanceReload()
+    }
+
+    private fun consumePendingAppearanceReload() {
+        val prefs = getSharedPreferences("via_lite_prefs", MODE_PRIVATE)
+        if (prefs.getBoolean("pending_appearance_reload", false)) {
+            prefs.edit().putBoolean("pending_appearance_reload", false).apply()
+            if (!binding.webView.url.isNullOrBlank() && binding.webView.url != "about:blank") {
+                binding.webView.reload()
+            }
+        }
     }
 
     private fun consumePendingCacheClear() {
@@ -299,7 +310,15 @@ class MainActivity : AppCompatActivity() {
 
     private fun addHistoryEntry(title: String, url: String) {
         val list = loadHistory()
-        list.add(0, HistoryEntry(title, url, System.currentTimeMillis()))
+        val now = System.currentTimeMillis()
+        // Yönlendirme zincirleri veya tekrarlı tetiklenmeler aynı gezinmeyi
+        // birden fazla kayıt olarak eklemesin diye, son kayıt çok yakın zamanda
+        // eklenmişse onu güncelliyoruz, yeni satır eklemiyoruz.
+        if (list.isNotEmpty() && (now - list[0].timestamp) < 3000) {
+            list[0] = HistoryEntry(title, url, now)
+        } else {
+            list.add(0, HistoryEntry(title, url, now))
+        }
         // Listeyi gereksiz büyümesin diye en fazla 200 kayıtla sınırlıyoruz.
         while (list.size > 200) {
             list.removeAt(list.size - 1)
@@ -547,8 +566,18 @@ class MainActivity : AppCompatActivity() {
 
         binding.webView.settings.textZoom = prefs.getInt("text_zoom", 100)
 
+        val forceDark = prefs.getBoolean("force_dark_web", false)
+
+        // FORCE_DARK: eski ama uygulamanın kendi temasından bağımsız, doğrudan zorlayan API.
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK)) {
+            WebSettingsCompat.setForceDark(
+                binding.webView.settings,
+                if (forceDark) WebSettingsCompat.FORCE_DARK_ON else WebSettingsCompat.FORCE_DARK_OFF
+            )
+        }
+
+        // ALGORITHMIC_DARKENING: daha yeni API, FORCE_DARK ile birlikte ayarlanması zararsız.
         if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
-            val forceDark = prefs.getBoolean("force_dark_web", false)
             WebSettingsCompat.setAlgorithmicDarkeningAllowed(binding.webView.settings, forceDark)
         }
     }
