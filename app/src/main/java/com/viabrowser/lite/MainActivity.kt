@@ -179,13 +179,21 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun hideBars() {
-        binding.topToolbar.visibility = View.GONE
-        binding.bottomNavBar.visibility = View.GONE
+        if (binding.topToolbar.translationY == 0f) {
+            binding.topToolbar.animate().translationY(-binding.topToolbar.height.toFloat()).start()
+        }
+        if (binding.bottomNavBar.translationY == 0f) {
+            binding.bottomNavBar.animate().translationY(binding.bottomNavBar.height.toFloat()).start()
+        }
     }
 
     private fun showBars() {
-        binding.topToolbar.visibility = View.VISIBLE
-        binding.bottomNavBar.visibility = View.VISIBLE
+        if (binding.topToolbar.translationY != 0f) {
+            binding.topToolbar.animate().translationY(0f).start()
+        }
+        if (binding.bottomNavBar.translationY != 0f) {
+            binding.bottomNavBar.animate().translationY(0f).start()
+        }
     }
 
     private fun applyThemeColorFromPage() {
