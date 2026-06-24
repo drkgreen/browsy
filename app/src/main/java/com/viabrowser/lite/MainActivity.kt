@@ -180,7 +180,7 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
 
-                val threshold = resources.displayMetrics.heightPixels / 2
+                val threshold = resources.displayMetrics.heightPixels / 3
                 val cumulativeDelta = scrollY - scrollAnchorY
 
                 if (cumulativeDelta > threshold) {
@@ -192,7 +192,7 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 scrollHandler.removeCallbacks(commitBarVisibility)
-                scrollHandler.postDelayed(commitBarVisibility, 500)
+                scrollHandler.postDelayed(commitBarVisibility, 250)
             }
         }
     }
