@@ -379,7 +379,7 @@ class MainActivity : AppCompatActivity() {
 
         container.addView(
             buildFunctionMenuCard(
-                iconRes = R.drawable.ic_close,
+                iconRes = R.drawable.ic_power,
                 label = "Kapat",
                 statusText = null,
                 isActive = false
