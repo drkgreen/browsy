@@ -170,18 +170,17 @@ class MainActivity : AppCompatActivity() {
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             webView.setOnScrollChangeListener { _, _, scrollY, _, oldScrollY ->
-                val direction = when {
-                    scrollY > oldScrollY -> 1
-                    scrollY < oldScrollY -> -1
-                    else -> 0
-                }
-                if (direction != 0 && direction != lastScrollDirection) {
-                    // Yön değişti, kümülatif takibi bu noktadan yeniden başlat.
-                    scrollAnchorY = oldScrollY
-                    lastScrollDirection = direction
+                val rawDelta = scrollY - oldScrollY
+                if (kotlin.math.abs(rawDelta) >= dp(2)) {
+                    val direction = if (rawDelta > 0) 1 else -1
+                    if (direction != lastScrollDirection) {
+                        // Yön gerçekten değişti (ufak titreşim değil), takibi buradan başlat.
+                        scrollAnchorY = oldScrollY
+                        lastScrollDirection = direction
+                    }
                 }
 
-                val threshold = dp(100)
+                val threshold = resources.displayMetrics.heightPixels / 2
                 val cumulativeDelta = scrollY - scrollAnchorY
 
                 if (cumulativeDelta > threshold) {
