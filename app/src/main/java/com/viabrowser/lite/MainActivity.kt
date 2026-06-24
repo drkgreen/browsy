@@ -5,6 +5,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -34,6 +35,8 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.webkit.WebSettingsCompat
+import androidx.webkit.WebViewFeature
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.viabrowser.lite.databinding.ActivityMainBinding
 import org.json.JSONObject
@@ -124,6 +127,22 @@ class MainActivity : AppCompatActivity() {
         restoreCurrentTab()
     }
 
+    override fun onResume() {
+        super.onResume()
+        applyAppearanceSettings()
+    }
+
+    private fun applyAppearanceSettings() {
+        val prefs = getSharedPreferences("via_lite_prefs", MODE_PRIVATE)
+
+        binding.webView.settings.textZoom = prefs.getInt("text_zoom", 100)
+
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
+            val forceDark = prefs.getBoolean("force_dark_web", false)
+            WebSettingsCompat.setAlgorithmicDarkeningAllowed(binding.webView.settings, forceDark)
+        }
+    }
+
     private fun setupWebView() {
         val webView = binding.webView
 
@@ -136,6 +155,8 @@ class MainActivity : AppCompatActivity() {
             displayZoomControls = false
             mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
         }
+
+        applyAppearanceSettings()
 
         webView.webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(
@@ -330,7 +351,13 @@ class MainActivity : AppCompatActivity() {
             }
         }
         binding.btnHome.setOnClickListener {
-            showHomeScreen()
+            val customUrl = getCustomStartUrlIfEnabled()
+            if (!customUrl.isNullOrBlank()) {
+                showBrowser()
+                binding.webView.loadUrl(customUrl)
+            } else {
+                showHomeScreen()
+            }
         }
         binding.btnTabs.setOnClickListener {
             showTabSwitcher()
@@ -394,6 +421,18 @@ class MainActivity : AppCompatActivity() {
                     if (newState) "Reklam engelleme açıldı" else "Reklam engelleme kapatıldı",
                     Toast.LENGTH_SHORT
                 ).show()
+            }
+        )
+
+        container.addView(
+            buildFunctionMenuCard(
+                iconRes = R.drawable.ic_settings,
+                label = "Ayarlar",
+                statusText = null,
+                isActive = false
+            ) {
+                dialog.dismiss()
+                startActivity(Intent(this, SettingsActivity::class.java))
             }
         )
 
@@ -512,6 +551,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun currentTab(): TabInfo = tabs[currentTabIndex]
 
+    private fun getCustomStartUrlIfEnabled(): String? {
+        val prefs = getSharedPreferences("via_lite_prefs", MODE_PRIVATE)
+        if (prefs.getString("home_mode", "default") != "custom") return null
+        return prefs.getString("home_custom_url", null)
+    }
+
     private fun updateTabCountBadge() {
         binding.tabCountText.text = tabs.size.toString()
     }
@@ -541,8 +586,14 @@ class MainActivity : AppCompatActivity() {
                 showBrowser()
             }
             else -> {
-                binding.webView.loadUrl("about:blank")
-                showHomeScreen()
+                val customUrl = getCustomStartUrlIfEnabled()
+                if (!customUrl.isNullOrBlank()) {
+                    binding.webView.loadUrl(customUrl)
+                    showBrowser()
+                } else {
+                    binding.webView.loadUrl("about:blank")
+                    showHomeScreen()
+                }
             }
         }
         if (tab.url != null) {
@@ -719,7 +770,16 @@ class MainActivity : AppCompatActivity() {
         return when {
             raw.startsWith("http://") || raw.startsWith("https://") -> raw
             looksLikeUrl -> "https://$raw"
-            else -> "https://www.google.com/search?q=" + URLEncoder.encode(raw, "UTF-8")
+            else -> searchEngineUrlPrefix() + URLEncoder.encode(raw, "UTF-8")
+        }
+    }
+
+    private fun searchEngineUrlPrefix(): String {
+        val engine = getSharedPreferences("via_lite_prefs", MODE_PRIVATE).getString("search_engine", "google")
+        return when (engine) {
+            "bing" -> "https://www.bing.com/search?q="
+            "duckduckgo" -> "https://duckduckgo.com/?q="
+            else -> "https://www.google.com/search?q="
         }
     }
 
