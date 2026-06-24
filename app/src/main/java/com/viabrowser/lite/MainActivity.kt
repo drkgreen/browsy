@@ -192,7 +192,7 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 scrollHandler.removeCallbacks(commitBarVisibility)
-                scrollHandler.postDelayed(commitBarVisibility, 150)
+                scrollHandler.postDelayed(commitBarVisibility, 1000)
             }
         }
     }
