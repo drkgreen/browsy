@@ -52,17 +52,8 @@ class MainActivity : AppCompatActivity() {
 
     private val longPressHandler = Handler(Looper.getMainLooper())
 
-    private val scrollHandler = Handler(Looper.getMainLooper())
-    private var pendingBarsHidden: Boolean? = null
     private var scrollAnchorY = 0
     private var lastScrollDirection = 0
-    private val commitBarVisibility = Runnable {
-        when (pendingBarsHidden) {
-            true -> hideBars()
-            false -> showBars()
-            null -> {}
-        }
-    }
 
     private val adHosts = setOf(
         "doubleclick.net",
@@ -126,8 +117,6 @@ class MainActivity : AppCompatActivity() {
                     binding.editUrl.setText(view.title?.takeIf { it.isNotBlank() } ?: url)
                 }
                 binding.swipeRefresh.isRefreshing = false
-                scrollHandler.removeCallbacks(commitBarVisibility)
-                pendingBarsHidden = false
                 scrollAnchorY = 0
                 lastScrollDirection = 0
                 showBars()
@@ -184,15 +173,12 @@ class MainActivity : AppCompatActivity() {
                 val cumulativeDelta = scrollY - scrollAnchorY
 
                 if (cumulativeDelta > threshold) {
-                    pendingBarsHidden = true
+                    hideBars()
                     scrollAnchorY = scrollY
                 } else if (cumulativeDelta < -threshold) {
-                    pendingBarsHidden = false
+                    showBars()
                     scrollAnchorY = scrollY
                 }
-
-                scrollHandler.removeCallbacks(commitBarVisibility)
-                scrollHandler.postDelayed(commitBarVisibility, 250)
             }
         }
     }
