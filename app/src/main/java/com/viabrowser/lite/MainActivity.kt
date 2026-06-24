@@ -34,6 +34,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.viabrowser.lite.databinding.ActivityMainBinding
 import org.json.JSONObject
 import java.io.ByteArrayInputStream
@@ -351,32 +352,109 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showBottomMenu(anchor: View) {
-        val popup = PopupMenu(this, anchor)
-        popup.menuInflater.inflate(R.menu.bottom_menu, popup.menu)
-
-        val adBlockItem = popup.menu.findItem(R.id.menu_toggle_adblock)
-        adBlockItem.title = if (isAdBlockEnabled()) "Reklam Engelleme: Açık" else "Reklam Engelleme: Kapalı"
-
-        popup.setOnMenuItemClickListener { item ->
-            when (item.itemId) {
-                R.id.menu_toggle_adblock -> {
-                    val newState = !isAdBlockEnabled()
-                    setAdBlockEnabled(newState)
-                    Toast.makeText(
-                        this,
-                        if (newState) "Reklam engelleme açıldı" else "Reklam engelleme kapatıldı",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                    true
-                }
-                R.id.menu_close_app -> {
-                    finishAffinity()
-                    true
-                }
-                else -> false
-            }
+        val dialog = BottomSheetDialog(this)
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(dp(8), dp(24), dp(8), dp(32))
         }
-        popup.show()
+
+        val adBlockOn = isAdBlockEnabled()
+        container.addView(
+            buildFunctionMenuCard(
+                iconRes = R.drawable.ic_block,
+                label = "Reklam Engelleme",
+                statusText = if (adBlockOn) "Açık" else "Kapalı",
+                isActive = adBlockOn
+            ) {
+                val newState = !isAdBlockEnabled()
+                setAdBlockEnabled(newState)
+                dialog.dismiss()
+                Toast.makeText(
+                    this,
+                    if (newState) "Reklam engelleme açıldı" else "Reklam engelleme kapatıldı",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        )
+
+        container.addView(
+            buildFunctionMenuCard(
+                iconRes = R.drawable.ic_close,
+                label = "Kapat",
+                statusText = null,
+                isActive = false
+            ) {
+                finishAffinity()
+            }
+        )
+
+        dialog.setContentView(container)
+        dialog.show()
+    }
+
+    private fun buildFunctionMenuCard(
+        iconRes: Int,
+        label: String,
+        statusText: String?,
+        isActive: Boolean,
+        onClick: () -> Unit
+    ): View {
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            isClickable = true
+            isFocusable = true
+            setPadding(dp(4), dp(8), dp(4), dp(8))
+            setOnClickListener { onClick() }
+        }
+
+        val iconView = ImageView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(56), dp(56))
+            background = roundedSquareDrawable(if (isActive) 0xFFD32F2F.toInt() else 0xFFF1F0F5.toInt())
+            setPadding(dp(14), dp(14), dp(14), dp(14))
+            setImageResource(iconRes)
+            setColorFilter(if (isActive) Color.WHITE else 0xFF3C3C43.toInt())
+            scaleType = ImageView.ScaleType.FIT_CENTER
+        }
+
+        val labelView = TextView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp(8) }
+            text = label
+            textSize = 13f
+            gravity = Gravity.CENTER
+            setTextColor(0xFF1A1A1A.toInt())
+        }
+
+        card.addView(iconView)
+        card.addView(labelView)
+
+        if (statusText != null) {
+            val statusView = TextView(this).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = dp(2) }
+                text = statusText
+                textSize = 12f
+                gravity = Gravity.CENTER
+                setTextColor(0xFF8E8E93.toInt())
+            }
+            card.addView(statusView)
+        }
+
+        return card
+    }
+
+    private fun roundedSquareDrawable(color: Int): GradientDrawable {
+        return GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dp(16).toFloat()
+            setColor(color)
+        }
     }
 
     private fun addCurrentPageToHome() {
