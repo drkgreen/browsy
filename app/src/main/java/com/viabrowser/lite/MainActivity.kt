@@ -17,8 +17,10 @@ import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.os.Message
+import android.text.Editable
 import android.text.InputType
 import android.text.TextUtils
+import android.text.TextWatcher
 import android.util.Base64
 import android.view.DragEvent
 import android.view.Gravity
@@ -42,7 +44,6 @@ import android.widget.EditText
 import android.widget.GridLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.PopupMenu
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
@@ -69,7 +70,8 @@ data class TabInfo(
     var title: String = "Yeni Sekme",
     var url: String? = null,
     var favicon: Bitmap? = null,
-    var webViewState: Bundle? = null
+    var webViewState: Bundle? = null,
+    var isDesktopMode: Boolean = false
 )
 
 data class SitePermission(val host: String, val type: String, var decision: String)
@@ -110,9 +112,12 @@ class MainActivity : AppCompatActivity() {
         private const val ADBLOCK_CACHE_FILE = "adblock_hosts_remote.txt"
         private const val ADBLOCK_UPDATE_INTERVAL_MS = 7L * 24 * 60 * 60 * 1000 // 7 gün
         private const val ADBLOCK_MIN_VALID_ENTRIES = 1000
+        private const val DESKTOP_USER_AGENT =
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
     }
 
     private val longPressHandler = Handler(Looper.getMainLooper())
+    private var defaultUserAgent: String? = null
 
     private val adBlockHosts: MutableSet<String> by lazy { loadAdBlockHosts() }
 
@@ -851,6 +856,7 @@ class MainActivity : AppCompatActivity() {
             setSupportMultipleWindows(true)
             javaScriptCanOpenWindowsAutomatically = true
         }
+        defaultUserAgent = webView.settings.userAgentString
 
         applyAppearanceSettings()
         applyCookieSettings()
@@ -860,6 +866,23 @@ class MainActivity : AppCompatActivity() {
         }
 
         webView.webViewClient = object : WebViewClient() {
+            override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean {
+                if (url.startsWith("http://") || url.startsWith("https://")) {
+                    return false
+                }
+                return try {
+                    val intent = Intent.parseUri(url, Intent.URI_INTENT_SCHEME)
+                    intent.addCategory(Intent.CATEGORY_BROWSABLE)
+                    if (intent.resolveActivity(packageManager) != null) {
+                        startActivity(intent)
+                    }
+                    true
+                } catch (e: Exception) {
+                    // ayrıştırılamayan veya açılamayan şema; sessizce yok say
+                    true
+                }
+            }
+
             override fun shouldInterceptRequest(
                 view: WebView,
                 request: WebResourceRequest
@@ -887,6 +910,14 @@ class MainActivity : AppCompatActivity() {
                 binding.swipeRefresh.isRefreshing = false
                 showBars()
                 applyThemeColorFromPage()
+                if (currentTab().isDesktopMode) {
+                    view.evaluateJavascript(
+                        "(function(){var m=document.querySelector('meta[name=viewport]');" +
+                            "if(!m){m=document.createElement('meta');m.setAttribute('name','viewport');document.head.appendChild(m);}" +
+                            "m.setAttribute('content','width=1024');})();",
+                        null
+                    )
+                }
             }
         }
 
@@ -1041,9 +1072,6 @@ class MainActivity : AppCompatActivity() {
     private var suppressUrlFocusRevert = false
 
     private fun setupControls() {
-        binding.btnMenu.setOnClickListener { anchor ->
-            showBrowserMenu(anchor)
-        }
         binding.editUrl.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_GO || actionId == EditorInfo.IME_ACTION_DONE) {
                 suppressUrlFocusRevert = true
@@ -1103,6 +1131,41 @@ class MainActivity : AppCompatActivity() {
             showBottomMenu(anchor)
         }
 
+        // Sayfada bul çubuğu
+        binding.webView.setFindListener { activeMatchOrdinal, numberOfMatches, isDoneCounting ->
+            if (isDoneCounting) {
+                binding.findInPageCount.text = if (numberOfMatches == 0) {
+                    "0/0"
+                } else {
+                    "${activeMatchOrdinal + 1}/$numberOfMatches"
+                }
+            }
+        }
+        binding.findInPageInput.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                val query = s?.toString() ?: ""
+                if (query.isEmpty()) {
+                    binding.webView.clearMatches()
+                    binding.findInPageCount.text = ""
+                } else {
+                    binding.webView.findAllAsync(query)
+                }
+            }
+        })
+        binding.findInPageInput.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_NEXT) {
+                binding.webView.findNext(true)
+                true
+            } else {
+                false
+            }
+        }
+        binding.btnFindPrev.setOnClickListener { binding.webView.findNext(false) }
+        binding.btnFindNext.setOnClickListener { binding.webView.findNext(true) }
+        binding.btnFindClose.setOnClickListener { closeFindInPage() }
+
         // Açılış ekranı arama kutusu
         binding.homeSearchBox.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_GO || actionId == EditorInfo.IME_ACTION_DONE) {
@@ -1121,25 +1184,14 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun showBrowserMenu(anchor: View) {
-        val popup = PopupMenu(this, anchor)
-        popup.menuInflater.inflate(R.menu.browser_menu, popup.menu)
-        popup.setOnMenuItemClickListener { item ->
-            if (item.itemId == R.id.menu_add_to_home) {
-                addCurrentPageToHome()
-                true
-            } else {
-                false
-            }
-        }
-        popup.show()
-    }
-
     private fun showBottomMenu(anchor: View) {
         val dialog = BottomSheetDialog(this)
+        val rootContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(dp(8), dp(24), dp(8), dp(32))
+            setPadding(dp(8), dp(24), dp(8), dp(8))
         }
 
         val adBlockOn = isAdBlockEnabled()
@@ -1208,7 +1260,62 @@ class MainActivity : AppCompatActivity() {
             }
         )
 
-        dialog.setContentView(container)
+        val container2 = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(dp(8), dp(0), dp(8), dp(32))
+        }
+
+        container2.addView(
+            buildFunctionMenuCard(
+                iconRes = R.drawable.ic_search,
+                label = "Sayfada Bul",
+                statusText = null,
+                isActive = false
+            ) {
+                dialog.dismiss()
+                showFindInPage()
+            }
+        )
+
+        container2.addView(
+            buildFunctionMenuCard(
+                iconRes = R.drawable.ic_share,
+                label = "Paylaş",
+                statusText = null,
+                isActive = false
+            ) {
+                dialog.dismiss()
+                shareCurrentPage()
+            }
+        )
+
+        container2.addView(
+            buildFunctionMenuCard(
+                iconRes = R.drawable.ic_desktop,
+                label = "Masaüstü Sitesi",
+                statusText = if (currentTab().isDesktopMode) "Açık" else "Kapalı",
+                isActive = currentTab().isDesktopMode
+            ) {
+                dialog.dismiss()
+                toggleDesktopMode()
+            }
+        )
+
+        container2.addView(
+            buildFunctionMenuCard(
+                iconRes = R.drawable.ic_bookmark,
+                label = "Yer İmine Ekle",
+                statusText = null,
+                isActive = false
+            ) {
+                dialog.dismiss()
+                addCurrentPageToHome()
+            }
+        )
+
+        rootContainer.addView(container)
+        rootContainer.addView(container2)
+        dialog.setContentView(rootContainer)
         dialog.show()
     }
 
@@ -1292,9 +1399,65 @@ class MainActivity : AppCompatActivity() {
         bookmarks.add(BookmarkItem(title, url, placeholderIcon))
         saveBookmarksList()
         refreshBookmarksGrid()
-        Toast.makeText(this, "Ana ekrana eklendi", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "Yer imlerine eklendi", Toast.LENGTH_SHORT).show()
 
         fetchFaviconAsync(url)
+    }
+
+    // ---- Masaüstü sitesi modu ----
+
+    private fun toggleDesktopMode() {
+        val tab = currentTab()
+        tab.isDesktopMode = !tab.isDesktopMode
+        applyDesktopModeSetting(tab.isDesktopMode)
+        binding.webView.reload()
+        Toast.makeText(
+            this,
+            if (tab.isDesktopMode) "Masaüstü sitesi açıldı" else "Masaüstü sitesi kapatıldı",
+            Toast.LENGTH_SHORT
+        ).show()
+    }
+
+    private fun applyDesktopModeSetting(enabled: Boolean) {
+        binding.webView.settings.apply {
+            userAgentString = if (enabled) DESKTOP_USER_AGENT else defaultUserAgent
+            useWideViewPort = true
+            loadWithOverviewMode = true
+        }
+    }
+
+    // ---- Paylaş ----
+
+    private fun shareCurrentPage() {
+        val url = binding.webView.url
+        if (url.isNullOrBlank()) {
+            Toast.makeText(this, "Paylaşılacak bir sayfa yok", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, url)
+            putExtra(Intent.EXTRA_SUBJECT, binding.webView.title?.takeIf { it.isNotBlank() } ?: url)
+        }
+        startActivity(Intent.createChooser(intent, "Paylaş"))
+    }
+
+    // ---- Sayfada bul ----
+
+    private fun showFindInPage() {
+        showBrowser()
+        binding.findInPageBar.visibility = View.VISIBLE
+        binding.findInPageInput.setText("")
+        binding.findInPageCount.text = ""
+        binding.findInPageInput.requestFocus()
+        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        imm.showSoftInput(binding.findInPageInput, InputMethodManager.SHOW_IMPLICIT)
+    }
+
+    private fun closeFindInPage() {
+        binding.webView.clearMatches()
+        binding.findInPageBar.visibility = View.GONE
+        hideKeyboard(binding.findInPageInput)
     }
 
     private fun showHomeScreen() {
@@ -1336,6 +1499,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun restoreCurrentTab() {
         val tab = currentTab()
+        applyDesktopModeSetting(tab.isDesktopMode)
         val state = tab.webViewState
         when {
             state != null -> {
