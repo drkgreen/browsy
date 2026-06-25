@@ -791,6 +791,7 @@ class MainActivity : AppCompatActivity() {
                 lastScrollDirection = 0
                 showBars()
                 applyThemeColorFromPage()
+                applyTextReflowIfEnabled()
             }
         }
 
@@ -917,6 +918,22 @@ class MainActivity : AppCompatActivity() {
         if (binding.bottomNavBar.translationY != 0f) {
             binding.bottomNavBar.animate().translationY(0f).start()
         }
+    }
+
+    private fun applyTextReflowIfEnabled() {
+        val enabled = getSharedPreferences("via_lite_prefs", MODE_PRIVATE).getBoolean("text_reflow", false)
+        if (!enabled) return
+        val css = "* { max-width: 100% !important; box-sizing: border-box !important; } " +
+            "body, html { width: 100% !important; overflow-x: hidden !important; } " +
+            "img, table, pre, video, iframe { max-width: 100% !important; height: auto !important; } " +
+            "p, div, span, li, td, h1, h2, h3, h4, h5, h6 { word-wrap: break-word !important; overflow-wrap: break-word !important; }"
+        val js = "(function(){" +
+            "var style=document.createElement('style');" +
+            "style.type='text/css';" +
+            "style.innerHTML=" + org.json.JSONObject.quote(css) + ";" +
+            "document.head.appendChild(style);" +
+            "})();"
+        binding.webView.evaluateJavascript(js, null)
     }
 
     private fun applyThemeColorFromPage() {
