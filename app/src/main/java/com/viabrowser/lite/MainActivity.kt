@@ -1125,7 +1125,7 @@ class MainActivity : AppCompatActivity() {
                 resultMsg: Message
             ): Boolean {
                 val transport = resultMsg.obj as? WebView.WebViewTransport ?: return false
-                addNewTab()
+                prepareNewTabForPopup()
                 transport.webView = binding.webView
                 resultMsg.sendToTarget()
                 return true
@@ -1724,6 +1724,21 @@ class MainActivity : AppCompatActivity() {
         tabs.add(TabInfo(id = nextTabId++))
         currentTabIndex = tabs.size - 1
         restoreCurrentTab()
+    }
+
+    // window.open()/target="_blank" ile açılan popup'lar için: yeni sekme
+    // kaydını oluşturur ama paylaşılan WebView'e loadUrl/restoreState ile
+    // dokunmaz -- WebView.WebViewTransport zaten kendi navigasyonunu
+    // başlatacağı için, aynı anda ikinci bir navigasyon komutu vermek
+    // (örn. addNewTab()'ın about:blank yüklemesi) Chromium'un render
+    // sürecini çökertip uygulamayı kapatabiliyor.
+    private fun prepareNewTabForPopup() {
+        saveCurrentTabState()
+        tabs.add(TabInfo(id = nextTabId++))
+        currentTabIndex = tabs.size - 1
+        applyDesktopModeSetting(currentTab().isDesktopMode)
+        showBrowser()
+        updateTabCountBadge()
     }
 
     private fun closeTab(index: Int) {
