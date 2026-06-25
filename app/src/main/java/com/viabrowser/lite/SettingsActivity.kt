@@ -61,6 +61,8 @@ class SettingsActivity : AppCompatActivity() {
         binding.settingsContainer.addView(buildForceDarkRow())
         binding.settingsContainer.addView(buildDivider())
         binding.settingsContainer.addView(buildTextZoomRow())
+        binding.settingsContainer.addView(buildDivider())
+        binding.settingsContainer.addView(buildTextReflowRow())
 
         binding.settingsContainer.addView(buildSectionHeader("Gizlilik ve Güvenlik"))
         binding.settingsContainer.addView(buildClearDataRow())
@@ -301,6 +303,19 @@ class SettingsActivity : AppCompatActivity() {
     private fun buildTextZoomRow(): View {
         return buildSettingsRow("Yazı Boyutu", textZoomDisplayName(getTextZoom())) {
             showTextZoomDialog()
+        }
+    }
+
+    private fun buildTextReflowRow(): View {
+        return buildSwitchRow(
+            "Metni Sayfaya Sığdır",
+            "Mobil uyumlu olmayan sitelerde yatay kaydırmayı önler",
+            prefs().getBoolean("text_reflow", false)
+        ) { checked ->
+            prefs().edit()
+                .putBoolean("text_reflow", checked)
+                .putBoolean("pending_appearance_reload", true)
+                .apply()
         }
     }
 
