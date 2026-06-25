@@ -1903,7 +1903,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 DragEvent.ACTION_DRAG_ENDED -> {
                     view.background = ContextCompat.getDrawable(this, R.drawable.bg_delete_zone)
-                    view.visibility = View.GONE
+                    view.visibility = View.INVISIBLE
                     true
                 }
                 else -> true
