@@ -66,7 +66,6 @@ class NestedScrollWebView @JvmOverloads constructor(
                     nestedOffsetY += scrollOffset[1]
                     lastY -= scrollOffset[1]
                 }
-                trackedEvent.recycle()
                 return returnValue
             }
 
@@ -75,9 +74,7 @@ class NestedScrollWebView @JvmOverloads constructor(
             }
         }
 
-        val result = super.onTouchEvent(trackedEvent)
-        trackedEvent.recycle()
-        return result
+        return super.onTouchEvent(trackedEvent)
     }
 
     // ---- NestedScrollingChild: NestedScrollingChildHelper'a devrediyoruz ----
