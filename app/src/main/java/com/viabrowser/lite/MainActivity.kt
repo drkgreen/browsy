@@ -1305,7 +1305,7 @@ class MainActivity : AppCompatActivity() {
         }
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(dp(8), dp(8), dp(8), dp(8))
+            setPadding(dp(8), dp(8), dp(8), dp(32))
         }
 
         val adBlockOn = isAdBlockEnabled()
@@ -1376,7 +1376,7 @@ class MainActivity : AppCompatActivity() {
 
         val container2 = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(dp(8), dp(0), dp(8), dp(32))
+            setPadding(dp(8), dp(0), dp(8), dp(8))
         }
 
         container2.addView(
@@ -1439,11 +1439,11 @@ class MainActivity : AppCompatActivity() {
             }
         )
 
-        rootContainer.addView(buildMenuSectionLabel("TARAYICI"))
-        rootContainer.addView(container)
-        rootContainer.addView(buildMenuDivider())
         rootContainer.addView(buildMenuSectionLabel("BU SAYFA"))
         rootContainer.addView(container2)
+        rootContainer.addView(buildMenuDivider())
+        rootContainer.addView(buildMenuSectionLabel("TARAYICI"))
+        rootContainer.addView(container)
         dialog.setContentView(rootContainer)
         dialog.show()
     }
@@ -1454,7 +1454,7 @@ class MainActivity : AppCompatActivity() {
             textSize = 11f
             setTextColor(0xFFAEAEB2.toInt())
             letterSpacing = 0.08f
-            setPadding(dp(20), dp(12), dp(20), dp(4))
+            setPadding(dp(20), dp(16), dp(20), dp(4))
         }
     }
 
@@ -1488,11 +1488,11 @@ class MainActivity : AppCompatActivity() {
         }
 
         val iconView = ImageView(this).apply {
-            layoutParams = LinearLayout.LayoutParams(dp(56), dp(56))
+            layoutParams = LinearLayout.LayoutParams(dp(48), dp(48))
             background = roundedSquareDrawable(
                 if (isActive) ContextCompat.getColor(this@MainActivity, R.color.colorPrimary) else 0xFFF1F0F5.toInt()
             )
-            setPadding(dp(14), dp(14), dp(14), dp(14))
+            setPadding(dp(12), dp(12), dp(12), dp(12))
             setImageResource(iconRes)
             setColorFilter(if (isActive) Color.WHITE else 0xFF3C3C43.toInt())
             scaleType = ImageView.ScaleType.FIT_CENTER
@@ -1532,7 +1532,7 @@ class MainActivity : AppCompatActivity() {
     private fun roundedSquareDrawable(color: Int): GradientDrawable {
         return GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
-            cornerRadius = dp(16).toFloat()
+            cornerRadius = dp(14).toFloat()
             setColor(color)
         }
     }
