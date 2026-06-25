@@ -764,11 +764,17 @@ class MainActivity : AppCompatActivity() {
     private fun applyThemeColorFromPage() {
         val js = "(function(){" +
             "var nodes=document.querySelectorAll('meta[name=\"theme-color\"]');" +
-            "if(!nodes||nodes.length===0)return '';" +
             "for(var i=0;i<nodes.length;i++){" +
-            "if(!nodes[i].getAttribute('media'))return nodes[i].getAttribute('content')||'';" +
+            "if(!nodes[i].getAttribute('media')){" +
+            "var c=nodes[i].getAttribute('content');if(c)return c;" +
             "}" +
-            "return nodes[0].getAttribute('content')||'';" +
+            "}" +
+            "if(nodes.length>0){" +
+            "var c2=nodes[0].getAttribute('content');if(c2)return c2;" +
+            "}" +
+            "var bg=window.getComputedStyle(document.body).backgroundColor;" +
+            "if(bg && bg!=='rgba(0, 0, 0, 0)' && bg!=='transparent')return bg;" +
+            "return '';" +
             "})();"
         binding.webView.evaluateJavascript(js) { result ->
             val raw = result?.trim('"')?.takeIf { it.isNotBlank() && it != "null" }
