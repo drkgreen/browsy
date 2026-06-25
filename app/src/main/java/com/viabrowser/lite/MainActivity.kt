@@ -36,6 +36,7 @@ import android.webkit.WebStorage
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.GridLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -894,7 +895,7 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
 
-                val threshold = resources.displayMetrics.heightPixels / 3
+                val threshold = dp(64)
                 val cumulativeDelta = scrollY - scrollAnchorY
 
                 if (cumulativeDelta > threshold) {
@@ -911,18 +912,29 @@ class MainActivity : AppCompatActivity() {
     private fun hideBars() {
         if (binding.topToolbar.translationY == 0f) {
             binding.topToolbar.animate().translationY(-binding.topToolbar.height.toFloat()).start()
-        }
-        if (binding.bottomNavBar.translationY == 0f) {
             binding.bottomNavBar.animate().translationY(binding.bottomNavBar.height.toFloat()).start()
+            // Barlar gizlenirken içerik alanını hemen tam ekrana genişletiyoruz;
+            // barlar üstüne binmiyor çünkü artık görünür değiller.
+            setWebViewContentInsets(0, 0)
         }
     }
 
     private fun showBars() {
-        if (binding.topToolbar.translationY != 0f) {
-            binding.topToolbar.animate().translationY(0f).start()
-        }
-        if (binding.bottomNavBar.translationY != 0f) {
+        if (binding.topToolbar.translationY != 0f || binding.bottomNavBar.translationY != 0f) {
+            binding.topToolbar.animate()
+                .translationY(0f)
+                .withEndAction { setWebViewContentInsets(binding.topToolbar.height, binding.bottomNavBar.height) }
+                .start()
             binding.bottomNavBar.animate().translationY(0f).start()
+        }
+    }
+
+    private fun setWebViewContentInsets(topInset: Int, bottomInset: Int) {
+        val params = binding.swipeRefresh.layoutParams as? FrameLayout.LayoutParams ?: return
+        if (params.topMargin != topInset || params.bottomMargin != bottomInset) {
+            params.topMargin = topInset
+            params.bottomMargin = bottomInset
+            binding.swipeRefresh.layoutParams = params
         }
     }
 
