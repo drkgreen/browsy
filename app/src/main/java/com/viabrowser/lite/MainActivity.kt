@@ -10,7 +10,6 @@ import android.graphics.drawable.GradientDrawable
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.os.Handler
@@ -102,9 +101,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private val longPressHandler = Handler(Looper.getMainLooper())
-
-    private var scrollAnchorY = 0
-    private var lastScrollDirection = 0
 
     private val adBlockHosts: MutableSet<String> by lazy { loadAdBlockHosts() }
 
@@ -794,8 +790,6 @@ class MainActivity : AppCompatActivity() {
                 }
                 addHistoryEntry(view.title?.takeIf { it.isNotBlank() } ?: url, url)
                 binding.swipeRefresh.isRefreshing = false
-                scrollAnchorY = 0
-                lastScrollDirection = 0
                 showBars()
                 applyThemeColorFromPage()
             }
@@ -882,60 +876,18 @@ class MainActivity : AppCompatActivity() {
             binding.webView.reload()
         }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            webView.setOnScrollChangeListener { _, _, scrollY, _, oldScrollY ->
-                val rawDelta = scrollY - oldScrollY
-                if (kotlin.math.abs(rawDelta) >= dp(2)) {
-                    val direction = if (rawDelta > 0) 1 else -1
-                    if (direction != lastScrollDirection) {
-                        // Yön gerçekten değişti (ufak titreşim değil), takibi buradan başlat.
-                        scrollAnchorY = oldScrollY
-                        lastScrollDirection = direction
-                    }
-                }
-
-                val threshold = dp(64)
-                val cumulativeDelta = scrollY - scrollAnchorY
-
-                if (cumulativeDelta > threshold) {
-                    hideBars()
-                    scrollAnchorY = scrollY
-                } else if (cumulativeDelta < -threshold) {
-                    showBars()
-                    scrollAnchorY = scrollY
-                }
-            }
-        }
-    }
-
-    private fun hideBars() {
-        if (binding.topToolbar.translationY == 0f) {
-            binding.topToolbar.animate()
-                .translationY(-binding.topToolbar.height.toFloat())
-                .setDuration(200)
-                .setInterpolator(android.view.animation.AccelerateInterpolator(2f))
-                .start()
-            binding.bottomNavBar.animate()
-                .translationY(binding.bottomNavBar.height.toFloat())
-                .setDuration(200)
-                .setInterpolator(android.view.animation.AccelerateInterpolator(2f))
-                .start()
+        // AppBarLayout üst barı native olarak (gerçek dokunma fiziğiyle senkronize)
+        // kaydırınca gizleyip gösteriyor. Alt barı da aynı orana göre kaydırarak
+        // ikisini birlikte hareket ettiriyoruz.
+        binding.appBarLayout.addOnOffsetChangedListener { layout, verticalOffset ->
+            val range = layout.totalScrollRange
+            val fraction = if (range != 0) kotlin.math.abs(verticalOffset).toFloat() / range else 0f
+            binding.bottomNavBar.translationY = fraction * binding.bottomNavBar.height
         }
     }
 
     private fun showBars() {
-        if (binding.topToolbar.translationY != 0f || binding.bottomNavBar.translationY != 0f) {
-            binding.topToolbar.animate()
-                .translationY(0f)
-                .setDuration(200)
-                .setInterpolator(android.view.animation.DecelerateInterpolator(2f))
-                .start()
-            binding.bottomNavBar.animate()
-                .translationY(0f)
-                .setDuration(200)
-                .setInterpolator(android.view.animation.DecelerateInterpolator(2f))
-                .start()
-        }
+        binding.appBarLayout.setExpanded(true, true)
     }
 
     private fun applyThemeColorFromPage() {
