@@ -724,6 +724,13 @@ class MainActivity : AppCompatActivity() {
 
         binding.webView.settings.textZoom = prefs.getInt("text_zoom", 100)
 
+        val textReflow = prefs.getBoolean("text_reflow", false)
+        binding.webView.settings.layoutAlgorithm = if (textReflow) {
+            WebSettings.LayoutAlgorithm.TEXT_AUTOSIZING
+        } else {
+            WebSettings.LayoutAlgorithm.NORMAL
+        }
+
         val forceDark = prefs.getBoolean("force_dark_web", false)
 
         // FORCE_DARK: eski ama uygulamanın kendi temasından bağımsız, doğrudan zorlayan API.
@@ -791,7 +798,6 @@ class MainActivity : AppCompatActivity() {
                 lastScrollDirection = 0
                 showBars()
                 applyThemeColorFromPage()
-                applyTextReflowIfEnabled()
             }
         }
 
@@ -918,31 +924,6 @@ class MainActivity : AppCompatActivity() {
         if (binding.bottomNavBar.translationY != 0f) {
             binding.bottomNavBar.animate().translationY(0f).start()
         }
-    }
-
-    private fun applyTextReflowIfEnabled() {
-        val enabled = getSharedPreferences("via_lite_prefs", MODE_PRIVATE).getBoolean("text_reflow", false)
-        if (!enabled) return
-        val css = "* { max-width: 100% !important; box-sizing: border-box !important; } " +
-            "body, html { width: 100% !important; overflow-x: hidden !important; } " +
-            "img, table, pre, video, iframe { max-width: 100% !important; height: auto !important; } " +
-            "p, div, span, li, td, h1, h2, h3, h4, h5, h6 { word-wrap: break-word !important; overflow-wrap: break-word !important; }"
-        val js = "(function(){" +
-            "function applyFix(){" +
-            "var meta=document.querySelector('meta[name=\"viewport\"]');" +
-            "if(!meta){meta=document.createElement('meta');meta.setAttribute('name','viewport');document.head.appendChild(meta);}" +
-            "meta.setAttribute('content','width=device-width, initial-scale=1.0');" +
-            "if(!document.getElementById('vialite-reflow-style')){" +
-            "var style=document.createElement('style');" +
-            "style.id='vialite-reflow-style';" +
-            "style.innerHTML=" + org.json.JSONObject.quote(css) + ";" +
-            "document.head.appendChild(style);" +
-            "}" +
-            "}" +
-            "applyFix();" +
-            "setTimeout(applyFix,800);" +
-            "})();"
-        binding.webView.evaluateJavascript(js, null)
     }
 
     private fun applyThemeColorFromPage() {
