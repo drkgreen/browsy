@@ -68,6 +68,16 @@ class SettingsActivity : AppCompatActivity() {
         binding.settingsContainer.addView(buildThirdPartyCookiesRow())
         binding.settingsContainer.addView(buildDivider())
         binding.settingsContainer.addView(buildSitePermissionsRow())
+
+        binding.settingsContainer.addView(buildSectionHeader("Otomatik Doldurma"))
+        binding.settingsContainer.addView(buildSavedAddressesRow())
+        binding.settingsContainer.addView(buildDivider())
+        binding.settingsContainer.addView(buildSystemAutofillRow())
+
+        binding.settingsContainer.addView(buildSectionHeader("İndirilenler"))
+        binding.settingsContainer.addView(buildAskBeforeDownloadRow())
+        binding.settingsContainer.addView(buildDivider())
+        binding.settingsContainer.addView(buildDownloadNotificationsRow())
     }
 
     private fun buildSectionHeader(text: String): View {
@@ -508,5 +518,242 @@ class SettingsActivity : AppCompatActivity() {
         row.addView(textContainer)
         row.addView(removeButton)
         return row
+    }
+
+    // ---- Otomatik doldurma ----
+
+    private fun buildSavedAddressesRow(): View {
+        val count = loadSavedAddresses().size
+        return buildSettingsRow("Adreslerim", if (count == 0) "Kayıtlı adres yok" else "$count adres kayıtlı") {
+            showSavedAddressesList()
+        }
+    }
+
+    private fun buildSystemAutofillRow(): View {
+        return buildSettingsRow(
+            "Sistem Otomatik Doldurma Ayarları",
+            "Şifre ve kart bilgileri için Android'in kendi servisini aç"
+        ) {
+            openSystemAutofillSettings()
+        }
+    }
+
+    private fun openSystemAutofillSettings() {
+        try {
+            startActivity(Intent(Settings.ACTION_REQUEST_SET_AUTOFILL_SERVICE))
+        } catch (e: Exception) {
+            try {
+                startActivity(Intent(Settings.ACTION_SETTINGS))
+                Toast.makeText(this, "Sistem Ayarları > Diller ve Giriş > Otomatik Doldurma'yı aç", Toast.LENGTH_LONG).show()
+            } catch (e2: Exception) {
+                Toast.makeText(this, "Sistem ayarları açılamadı", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun loadSavedAddresses(): MutableList<SavedAddress> {
+        val raw = prefs().getString("saved_addresses", "") ?: ""
+        if (raw.isBlank()) return mutableListOf()
+        return raw.split("\n").mapNotNull { line ->
+            val parts = line.split("::")
+            if (parts.size == 6) {
+                SavedAddress(
+                    id = parts[0].toLongOrNull() ?: 0L,
+                    label = parts[1],
+                    fullName = parts[2],
+                    email = parts[3],
+                    phone = parts[4],
+                    address = parts[5]
+                )
+            } else null
+        }.toMutableList()
+    }
+
+    private fun saveSavedAddresses(list: List<SavedAddress>) {
+        val raw = list.joinToString("\n") {
+            "${it.id}::${it.label}::${it.fullName}::${it.email}::${it.phone}::${it.address}"
+        }
+        prefs().edit().putString("saved_addresses", raw).apply()
+    }
+
+    private fun showSavedAddressesList() {
+        val list = loadSavedAddresses()
+        val dialog = BottomSheetDialog(this)
+        val rootColumn = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+
+        val addRow = TextView(this).apply {
+            text = "+ Yeni Adres Ekle"
+            textSize = 15f
+            setTextColor(0xFF1976D2.toInt())
+            setPadding(dp(16), dp(14), dp(16), dp(14))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                dialog.dismiss()
+                showAddressEditDialog(null)
+            }
+        }
+        rootColumn.addView(addRow)
+        rootColumn.addView(
+            View(this).apply {
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1))
+                setBackgroundColor(0xFFEEEEEE.toInt())
+            }
+        )
+
+        val scrollView = ScrollView(this)
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(8), dp(8), dp(8), dp(16))
+        }
+        scrollView.addView(container)
+
+        if (list.isEmpty()) {
+            container.addView(
+                TextView(this).apply {
+                    text = "Henüz kayıtlı adres yok"
+                    setPadding(dp(16), dp(16), dp(16), dp(16))
+                    setTextColor(0xFF8E8E93.toInt())
+                }
+            )
+        } else {
+            list.forEach { addr ->
+                container.addView(buildSavedAddressRow(addr, dialog))
+            }
+        }
+
+        rootColumn.addView(scrollView)
+        dialog.setContentView(rootColumn)
+        dialog.show()
+    }
+
+    private fun buildSavedAddressRow(addr: SavedAddress, dialog: BottomSheetDialog): View {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                dialog.dismiss()
+                showAddressEditDialog(addr)
+            }
+        }
+        val textContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        textContainer.addView(
+            TextView(this).apply {
+                text = addr.label
+                textSize = 15f
+                setTextColor(0xFF1A1A1A.toInt())
+            }
+        )
+        textContainer.addView(
+            TextView(this).apply {
+                text = addr.fullName
+                textSize = 12f
+                setTextColor(0xFF8E8E93.toInt())
+                setPadding(0, dp(2), 0, 0)
+            }
+        )
+
+        val deleteButton = TextView(this).apply {
+            text = "Sil"
+            textSize = 14f
+            setTextColor(0xFFD32F2F.toInt())
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                val list = loadSavedAddresses()
+                list.removeAll { it.id == addr.id }
+                saveSavedAddresses(list)
+                dialog.dismiss()
+                buildSettingsList()
+            }
+        }
+
+        row.addView(textContainer)
+        row.addView(deleteButton)
+        return row
+    }
+
+    private fun showAddressEditDialog(existing: SavedAddress?) {
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(24), dp(8), dp(24), 0)
+        }
+        val labelInput = EditText(this).apply { hint = "Etiket (örn. Ev)"; setText(existing?.label ?: "") }
+        val nameInput = EditText(this).apply { hint = "Ad Soyad"; setText(existing?.fullName ?: "") }
+        val emailInput = EditText(this).apply {
+            hint = "E-posta"
+            inputType = InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+            setText(existing?.email ?: "")
+        }
+        val phoneInput = EditText(this).apply {
+            hint = "Telefon"
+            inputType = InputType.TYPE_CLASS_PHONE
+            setText(existing?.phone ?: "")
+        }
+        val addressInput = EditText(this).apply { hint = "Adres"; setText(existing?.address ?: "") }
+
+        container.addView(labelInput)
+        container.addView(nameInput)
+        container.addView(emailInput)
+        container.addView(phoneInput)
+        container.addView(addressInput)
+
+        AlertDialog.Builder(this)
+            .setTitle(if (existing == null) "Yeni Adres" else "Adresi Düzenle")
+            .setView(container)
+            .setPositiveButton("Kaydet") { _, _ ->
+                val list = loadSavedAddresses()
+                val label = labelInput.text.toString().trim().ifBlank { "Adres" }
+                val name = nameInput.text.toString().trim()
+                val email = emailInput.text.toString().trim()
+                val phone = phoneInput.text.toString().trim()
+                val address = addressInput.text.toString().trim()
+
+                if (existing != null) {
+                    val item = list.find { it.id == existing.id }
+                    if (item != null) {
+                        item.label = label
+                        item.fullName = name
+                        item.email = email
+                        item.phone = phone
+                        item.address = address
+                    }
+                } else {
+                    list.add(SavedAddress(System.currentTimeMillis(), label, name, email, phone, address))
+                }
+                saveSavedAddresses(list)
+                buildSettingsList()
+            }
+            .setNegativeButton("Vazgeç", null)
+            .show()
+    }
+
+    // ---- İndirilenler ----
+
+    private fun buildAskBeforeDownloadRow(): View {
+        return buildSwitchRow(
+            "İndirmeden Önce Sor",
+            "Her indirmede onay iste",
+            prefs().getBoolean("ask_before_download", false)
+        ) { checked ->
+            prefs().edit().putBoolean("ask_before_download", checked).apply()
+        }
+    }
+
+    private fun buildDownloadNotificationsRow(): View {
+        return buildSwitchRow(
+            "İndirme Bildirimleri",
+            "İndirme tamamlandığında bildirim göster",
+            prefs().getBoolean("download_notifications", true)
+        ) { checked ->
+            prefs().edit().putBoolean("download_notifications", checked).apply()
+        }
     }
 }
