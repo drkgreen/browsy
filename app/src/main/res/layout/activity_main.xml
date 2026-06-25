@@ -109,19 +109,53 @@
             android:padding="12dp"
             android:singleLine="true" />
 
-        <ScrollView
+        <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1">
 
-            <GridLayout
-                android:id="@+id/bookmarksGrid"
+            <ScrollView
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:columnCount="4"
-                android:padding="8dp" />
+                android:layout_height="match_parent">
 
-        </ScrollView>
+                <GridLayout
+                    android:id="@+id/bookmarksGrid"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:columnCount="4"
+                    android:padding="8dp" />
+
+            </ScrollView>
+
+            <LinearLayout
+                android:id="@+id/bookmarkDeleteZone"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:layout_gravity="top"
+                android:layout_margin="16dp"
+                android:background="@drawable/bg_delete_zone"
+                android:gravity="center"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <ImageView
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_marginEnd="8dp"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/ic_delete" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Silmek için buraya sürükle"
+                    android:textColor="#FFFFFF"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+            </LinearLayout>
+
+        </FrameLayout>
 
     </LinearLayout>
 
