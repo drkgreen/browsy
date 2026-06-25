@@ -12,6 +12,7 @@ import android.view.Gravity
 import android.view.View
 import android.webkit.CookieManager
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.RadioButton
 import android.widget.RadioGroup
@@ -100,14 +101,33 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
-    private fun buildSettingsRow(title: String, subtitle: String, onClick: () -> Unit): View {
+    private fun buildRowIcon(iconRes: Int): View {
+        return ImageView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(22), dp(22)).apply {
+                marginEnd = dp(16)
+            }
+            setImageResource(iconRes)
+            setColorFilter(0xFF6E6E73.toInt())
+            scaleType = ImageView.ScaleType.FIT_CENTER
+        }
+    }
+
+    private fun buildSettingsRow(title: String, subtitle: String, iconRes: Int? = null, onClick: () -> Unit): View {
         val row = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(16), dp(14), dp(16), dp(14))
             isClickable = true
             isFocusable = true
             background = rippleBackground()
             setOnClickListener { onClick() }
+        }
+        if (iconRes != null) {
+            row.addView(buildRowIcon(iconRes))
+        }
+        val textContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
         val titleView = TextView(this).apply {
             text = title
@@ -120,8 +140,9 @@ class SettingsActivity : AppCompatActivity() {
             setTextColor(0xFF8E8E93.toInt())
             setPadding(0, dp(4), 0, 0)
         }
-        row.addView(titleView)
-        row.addView(subtitleView)
+        textContainer.addView(titleView)
+        textContainer.addView(subtitleView)
+        row.addView(textContainer)
         return row
     }
 
@@ -136,7 +157,7 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun buildSearchEngineRow(): View {
-        return buildSettingsRow("Arama Motoru", searchEngineDisplayName(getSearchEngineKey())) {
+        return buildSettingsRow("Arama Motoru", searchEngineDisplayName(getSearchEngineKey()), R.drawable.ic_search) {
             showSearchEngineDialog()
         }
     }
@@ -169,7 +190,7 @@ class SettingsActivity : AppCompatActivity() {
         } else {
             "Ana ekranı göster"
         }
-        return buildSettingsRow("Açılış Sayfası", subtitle) {
+        return buildSettingsRow("Açılış Sayfası", subtitle, R.drawable.ic_home) {
             showStartPageDialog()
         }
     }
@@ -236,12 +257,20 @@ class SettingsActivity : AppCompatActivity() {
         title: String,
         subtitle: String,
         initialChecked: Boolean,
+        iconRes: Int? = null,
         onToggle: (Boolean) -> Unit
     ): View {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(16), dp(14), dp(16), dp(14))
+            isClickable = true
+            isFocusable = true
+            background = rippleBackground()
+        }
+
+        if (iconRes != null) {
+            row.addView(buildRowIcon(iconRes))
         }
 
         val textContainer = LinearLayout(this).apply {
@@ -267,6 +296,11 @@ class SettingsActivity : AppCompatActivity() {
             setOnCheckedChangeListener { _, checked -> onToggle(checked) }
         }
 
+        // Satırın herhangi bir yerine dokunmak switch'i değiştirir;
+        // switch'in kendisine basıldığında zaten kendi mekanizması çalışır,
+        // dokunuş row'a sızmadığı için çift tetiklenme olmaz.
+        row.setOnClickListener { switch.isChecked = !switch.isChecked }
+
         row.addView(textContainer)
         row.addView(switch)
         return row
@@ -280,7 +314,8 @@ class SettingsActivity : AppCompatActivity() {
         return buildSwitchRow(
             "Web Sayfalarını Karartma",
             "Karanlık modu desteklemeyen sitelerde de karanlık görünüm uygular",
-            isForceDarkEnabled()
+            isForceDarkEnabled(),
+            R.drawable.ic_moon
         ) { checked ->
             prefs().edit()
                 .putBoolean("force_dark_web", checked)
@@ -294,7 +329,7 @@ class SettingsActivity : AppCompatActivity() {
     private fun getTextZoom(): Int = prefs().getInt("text_zoom", 100)
 
     private fun buildTextZoomRow(): View {
-        return buildSettingsRow("Yazı Boyutu (Varsayılan)", "%${getTextZoom()}") {
+        return buildSettingsRow("Yazı Boyutu (Varsayılan)", "%${getTextZoom()}", R.drawable.ic_text_size) {
             showTextZoomDialog()
         }
     }
@@ -303,7 +338,8 @@ class SettingsActivity : AppCompatActivity() {
         return buildSwitchRow(
             "Metni Sayfaya Sığdır",
             "Mobil uyumlu olmayan sitelerde yatay kaydırmayı önler",
-            prefs().getBoolean("text_reflow", false)
+            prefs().getBoolean("text_reflow", false),
+            R.drawable.ic_text_size
         ) { checked ->
             prefs().edit()
                 .putBoolean("text_reflow", checked)
@@ -380,7 +416,7 @@ class SettingsActivity : AppCompatActivity() {
     // ---- Varsayılan tarayıcı ----
 
     private fun buildDefaultBrowserRow(): View {
-        return buildSettingsRow("Varsayılan Tarayıcı Yap", "Sistem ayarlarını aç") {
+        return buildSettingsRow("Varsayılan Tarayıcı Yap", "Sistem ayarlarını aç", R.drawable.ic_globe) {
             openDefaultAppsSettings()
         }
     }
@@ -403,7 +439,7 @@ class SettingsActivity : AppCompatActivity() {
     // ---- Verileri temizleme ----
 
     private fun buildClearDataRow(): View {
-        return buildSettingsRow("Verileri Temizle", "Geçmiş, çerezler, önbellek ve site verileri") {
+        return buildSettingsRow("Verileri Temizle", "Geçmiş, çerezler, önbellek ve site verileri", R.drawable.ic_trash) {
             showClearDataConfirmation()
         }
     }
@@ -461,7 +497,8 @@ class SettingsActivity : AppCompatActivity() {
         return buildSwitchRow(
             "Üçüncü Taraf Çerezlerini Engelle",
             "Farklı sitelerin sizi takip etmesini sınırlar",
-            isThirdPartyCookiesBlocked()
+            isThirdPartyCookiesBlocked(),
+            R.drawable.ic_block
         ) { checked ->
             prefs().edit().putBoolean("block_third_party_cookies", checked).apply()
         }
@@ -470,7 +507,7 @@ class SettingsActivity : AppCompatActivity() {
     // ---- Site izinleri ----
 
     private fun buildSitePermissionsRow(): View {
-        return buildSettingsRow("Site İzinleri", "Kamera, mikrofon, konum") {
+        return buildSettingsRow("Site İzinleri", "Kamera, mikrofon, konum", R.drawable.ic_shield) {
             showSitePermissionsList()
         }
     }
@@ -581,7 +618,11 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun buildSavedAddressesRow(): View {
         val count = loadSavedAddresses().size
-        return buildSettingsRow("Adreslerim", if (count == 0) "Kayıtlı adres yok" else "$count adres kayıtlı") {
+        return buildSettingsRow(
+            "Adreslerim",
+            if (count == 0) "Kayıtlı adres yok" else "$count adres kayıtlı",
+            R.drawable.ic_autofill
+        ) {
             showSavedAddressesList()
         }
     }
@@ -589,7 +630,8 @@ class SettingsActivity : AppCompatActivity() {
     private fun buildSystemAutofillRow(): View {
         return buildSettingsRow(
             "Sistem Otomatik Doldurma Ayarları",
-            "Şifre ve kart bilgileri için Android'in kendi servisini aç"
+            "Şifre ve kart bilgileri için Android'in kendi servisini aç",
+            R.drawable.ic_autofill
         ) {
             openSystemAutofillSettings()
         }
@@ -798,7 +840,8 @@ class SettingsActivity : AppCompatActivity() {
         return buildSwitchRow(
             "İndirmeden Önce Sor",
             "Her indirmede onay iste",
-            prefs().getBoolean("ask_before_download", false)
+            prefs().getBoolean("ask_before_download", false),
+            R.drawable.ic_download
         ) { checked ->
             prefs().edit().putBoolean("ask_before_download", checked).apply()
         }
@@ -808,7 +851,8 @@ class SettingsActivity : AppCompatActivity() {
         return buildSwitchRow(
             "İndirme Bildirimleri",
             "İndirme tamamlandığında bildirim göster",
-            prefs().getBoolean("download_notifications", true)
+            prefs().getBoolean("download_notifications", true),
+            R.drawable.ic_bell
         ) { checked ->
             prefs().edit().putBoolean("download_notifications", checked).apply()
         }
