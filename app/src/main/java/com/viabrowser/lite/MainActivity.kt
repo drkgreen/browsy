@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
+import android.graphics.Rect
 import android.content.res.ColorStateList
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
@@ -246,6 +247,7 @@ class MainActivity : AppCompatActivity() {
 
         setupWebView()
         setupControls()
+        setupKeyboardAvoidance()
 
         loadBookmarks()
         refreshBookmarksGrid()
@@ -1189,6 +1191,31 @@ class MainActivity : AppCompatActivity() {
     }
 
     private var suppressUrlFocusRevert = false
+
+    // ---- Klavye açılınca alt barı yukarı kaydırma ----
+    // adjustResize, WebView'in kendi klavye davranışıyla çakışıp güvenilmez
+    // olabildiğinden, görünür pencere alanını doğrudan ölçüp farkı kendimiz
+    // alt bara translationY olarak uyguluyoruz.
+
+    private var maxObservedRootHeight = 0
+
+    private fun setupKeyboardAvoidance() {
+        val rootView = binding.root
+        rootView.viewTreeObserver.addOnGlobalLayoutListener {
+            val rect = Rect()
+            rootView.getWindowVisibleDisplayFrame(rect)
+            val visibleHeight = rect.height()
+            if (visibleHeight > maxObservedRootHeight) {
+                maxObservedRootHeight = visibleHeight
+            }
+            val heightDiff = maxObservedRootHeight - visibleHeight
+            // Klavye genelde ekranın %15'inden daha yüksek bir alan kaplar;
+            // bundan düşük farklar durum çubuğu/sistem bar değişimi olabilir.
+            val keyboardThreshold = maxObservedRootHeight / 6
+            val keyboardHeight = if (heightDiff > keyboardThreshold) heightDiff else 0
+            binding.bottomNavBar.translationY = -keyboardHeight.toFloat()
+        }
+    }
 
     private fun setupControls() {
         binding.editUrl.setOnEditorActionListener { _, actionId, _ ->
