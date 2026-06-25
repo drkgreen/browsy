@@ -73,6 +73,15 @@ data class DownloadRecord(val fileName: String, val url: String, val timestamp: 
 
 data class HistoryEntry(val title: String, val url: String, val timestamp: Long)
 
+data class SavedAddress(
+    val id: Long,
+    var label: String,
+    var fullName: String,
+    var email: String,
+    var phone: String,
+    var address: String
+)
+
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
@@ -189,14 +198,46 @@ class MainActivity : AppCompatActivity() {
     // ---- Dosya indirme ----
 
     private fun startFileDownload(url: String, userAgent: String, contentDisposition: String, mimeType: String) {
+        val fileName = try {
+            URLUtil.guessFileName(url, contentDisposition, mimeType)
+        } catch (e: Exception) {
+            "dosya"
+        }
+
+        val prefs = getSharedPreferences("via_lite_prefs", MODE_PRIVATE)
+        val askBeforeDownload = prefs.getBoolean("ask_before_download", false)
+
+        if (askBeforeDownload) {
+            AlertDialog.Builder(this)
+                .setTitle("Dosyayı İndir")
+                .setMessage("\"$fileName\" indirilsin mi?")
+                .setPositiveButton("İndir") { _, _ ->
+                    enqueueDownload(url, userAgent, mimeType, fileName)
+                }
+                .setNegativeButton("Vazgeç", null)
+                .show()
+        } else {
+            enqueueDownload(url, userAgent, mimeType, fileName)
+        }
+    }
+
+    private fun enqueueDownload(url: String, userAgent: String, mimeType: String, fileName: String) {
         try {
-            val fileName = URLUtil.guessFileName(url, contentDisposition, mimeType)
+            val prefs = getSharedPreferences("via_lite_prefs", MODE_PRIVATE)
+            val showNotifications = prefs.getBoolean("download_notifications", true)
+
             val request = DownloadManager.Request(Uri.parse(url)).apply {
                 setMimeType(mimeType)
                 addRequestHeader("User-Agent", userAgent)
                 setTitle(fileName)
                 setDescription("İndiriliyor...")
-                setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                setNotificationVisibility(
+                    if (showNotifications) {
+                        DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED
+                    } else {
+                        DownloadManager.Request.VISIBILITY_HIDDEN
+                    }
+                )
                 setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
             }
             val downloadManager = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
@@ -290,6 +331,123 @@ class MainActivity : AppCompatActivity() {
             }
         )
         return row
+    }
+
+    // ---- Otomatik doldurma (adresler) ----
+
+    private fun loadSavedAddresses(): MutableList<SavedAddress> {
+        val raw = getSharedPreferences("via_lite_prefs", MODE_PRIVATE).getString("saved_addresses", "") ?: ""
+        if (raw.isBlank()) return mutableListOf()
+        return raw.split("\n").mapNotNull { line ->
+            val parts = line.split("::")
+            if (parts.size == 6) {
+                SavedAddress(
+                    id = parts[0].toLongOrNull() ?: 0L,
+                    label = parts[1],
+                    fullName = parts[2],
+                    email = parts[3],
+                    phone = parts[4],
+                    address = parts[5]
+                )
+            } else null
+        }.toMutableList()
+    }
+
+    private fun saveSavedAddresses(list: List<SavedAddress>) {
+        val raw = list.joinToString("\n") {
+            "${it.id}::${it.label}::${it.fullName}::${it.email}::${it.phone}::${it.address}"
+        }
+        getSharedPreferences("via_lite_prefs", MODE_PRIVATE).edit().putString("saved_addresses", raw).apply()
+    }
+
+    private fun showAddressFillList() {
+        val list = loadSavedAddresses()
+        val dialog = BottomSheetDialog(this)
+        val scrollView = android.widget.ScrollView(this)
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(8), dp(16), dp(8), dp(16))
+        }
+        scrollView.addView(container)
+
+        if (list.isEmpty()) {
+            container.addView(
+                TextView(this).apply {
+                    text = "Kayıtlı adres yok. Ayarlar > Otomatik Doldurma'dan ekleyebilirsin."
+                    setPadding(dp(16), dp(16), dp(16), dp(16))
+                    setTextColor(0xFF8E8E93.toInt())
+                }
+            )
+        } else {
+            list.forEach { addr ->
+                container.addView(buildAddressFillRow(addr, dialog))
+            }
+        }
+
+        dialog.setContentView(scrollView)
+        dialog.show()
+    }
+
+    private fun buildAddressFillRow(addr: SavedAddress, dialog: BottomSheetDialog): View {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                dialog.dismiss()
+                fillAddressIntoPage(addr)
+            }
+        }
+        row.addView(
+            TextView(this).apply {
+                text = addr.label
+                textSize = 15f
+                setTextColor(0xFF1A1A1A.toInt())
+            }
+        )
+        row.addView(
+            TextView(this).apply {
+                text = addr.fullName
+                textSize = 12f
+                setTextColor(0xFF8E8E93.toInt())
+                setPadding(0, dp(2), 0, 0)
+            }
+        )
+        return row
+    }
+
+    private fun fillAddressIntoPage(addr: SavedAddress) {
+        val json = org.json.JSONObject().apply {
+            put("fullName", addr.fullName)
+            put("email", addr.email)
+            put("phone", addr.phone)
+            put("address", addr.address)
+        }
+        val js = """
+            (function(data){
+                function setVal(el, val) {
+                    if (el && val) {
+                        el.value = val;
+                        el.dispatchEvent(new Event('input', {bubbles:true}));
+                        el.dispatchEvent(new Event('change', {bubbles:true}));
+                    }
+                }
+                function find(selectors) {
+                    for (var i = 0; i < selectors.length; i++) {
+                        var el = document.querySelector(selectors[i]);
+                        if (el) return el;
+                    }
+                    return null;
+                }
+                setVal(find(['input[autocomplete="name"]','input[name*="name" i]','input[id*="name" i]']), data.fullName);
+                setVal(find(['input[type="email"]','input[autocomplete="email"]','input[name*="email" i]','input[id*="email" i]']), data.email);
+                setVal(find(['input[type="tel"]','input[autocomplete="tel"]','input[name*="phone" i]','input[id*="phone" i]']), data.phone);
+                setVal(find(['textarea[name*="address" i]','input[autocomplete="street-address"]','input[name*="address" i]','input[id*="address" i]']), data.address);
+            })($json);
+        """.trimIndent()
+        binding.webView.evaluateJavascript(js, null)
+        Toast.makeText(this, "Adres dolduruldu", Toast.LENGTH_SHORT).show()
     }
 
     // ---- Geçmiş ----
@@ -953,6 +1111,18 @@ class MainActivity : AppCompatActivity() {
             ) {
                 dialog.dismiss()
                 showHistoryList()
+            }
+        )
+
+        container.addView(
+            buildFunctionMenuCard(
+                iconRes = R.drawable.ic_autofill,
+                label = "Otomatik Doldur",
+                statusText = null,
+                isActive = false
+            ) {
+                dialog.dismiss()
+                showAddressFillList()
             }
         )
 
