@@ -1306,10 +1306,11 @@ class MainActivity : AppCompatActivity() {
         val dialog = BottomSheetDialog(this)
         val rootContainer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(12), 0, 0)
         }
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(dp(8), dp(8), dp(8), dp(32))
+            setPadding(dp(8), dp(8), dp(8), dp(8))
         }
 
         val adBlockOn = isAdBlockEnabled()
@@ -1367,20 +1368,9 @@ class MainActivity : AppCompatActivity() {
             }
         )
 
-        container.addView(
-            buildFunctionMenuCard(
-                iconRes = R.drawable.ic_power,
-                label = "Kapat",
-                statusText = null,
-                isActive = false
-            ) {
-                finishAffinity()
-            }
-        )
-
         val container2 = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(dp(8), dp(0), dp(8), dp(8))
+            setPadding(dp(8), dp(8), dp(8), dp(8))
         }
 
         container2.addView(
@@ -1443,34 +1433,44 @@ class MainActivity : AppCompatActivity() {
             }
         )
 
-        rootContainer.addView(buildMenuSectionLabel("BU SAYFA"))
+        val utilityRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END or Gravity.CENTER_VERTICAL
+            setPadding(dp(16), dp(8), dp(16), dp(16))
+        }
+
+        utilityRow.addView(
+            ImageView(this).apply {
+                layoutParams = LinearLayout.LayoutParams(dp(44), dp(44))
+                background = cardRippleBackground()
+                setPadding(dp(10), dp(10), dp(10), dp(10))
+                setImageResource(R.drawable.ic_power)
+                setColorFilter(0xFF1A1A1A.toInt())
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                isClickable = true
+                isFocusable = true
+                setOnClickListener { finishAffinity() }
+            }
+        )
+
+        utilityRow.addView(
+            ImageView(this).apply {
+                layoutParams = LinearLayout.LayoutParams(dp(44), dp(44)).apply { marginStart = dp(8) }
+                background = cardRippleBackground()
+                setPadding(dp(10), dp(10), dp(10), dp(10))
+                setImageResource(R.drawable.ic_chevron_down)
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                isClickable = true
+                isFocusable = true
+                setOnClickListener { dialog.dismiss() }
+            }
+        )
+
         rootContainer.addView(container2)
-        rootContainer.addView(buildMenuDivider())
-        rootContainer.addView(buildMenuSectionLabel("TARAYICI"))
         rootContainer.addView(container)
+        rootContainer.addView(utilityRow)
         dialog.setContentView(rootContainer)
         dialog.show()
-    }
-
-    private fun buildMenuSectionLabel(text: String): View {
-        return TextView(this).apply {
-            this.text = text
-            textSize = 11f
-            setTextColor(0xFFAEAEB2.toInt())
-            letterSpacing = 0.08f
-            setPadding(dp(20), dp(16), dp(20), dp(4))
-        }
-    }
-
-    private fun buildMenuDivider(): View {
-        return View(this).apply {
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1)).apply {
-                topMargin = dp(8)
-                marginStart = dp(20)
-                marginEnd = dp(20)
-            }
-            setBackgroundColor(0xFFEEEEEE.toInt())
-        }
     }
 
     private fun buildFunctionMenuCard(
@@ -1486,19 +1486,17 @@ class MainActivity : AppCompatActivity() {
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             isClickable = true
             isFocusable = true
-            setPadding(dp(4), dp(8), dp(4), dp(8))
+            setPadding(dp(4), dp(10), dp(4), dp(10))
             background = cardRippleBackground()
             setOnClickListener { onClick() }
         }
 
         val iconView = ImageView(this).apply {
-            layoutParams = LinearLayout.LayoutParams(dp(48), dp(48))
-            background = roundedSquareDrawable(
-                if (isActive) ContextCompat.getColor(this@MainActivity, R.color.colorPrimary) else 0xFFF1F0F5.toInt()
-            )
-            setPadding(dp(12), dp(12), dp(12), dp(12))
+            layoutParams = LinearLayout.LayoutParams(dp(28), dp(28))
             setImageResource(iconRes)
-            setColorFilter(if (isActive) Color.WHITE else 0xFF3C3C43.toInt())
+            setColorFilter(
+                if (isActive) ContextCompat.getColor(this@MainActivity, R.color.colorPrimary) else 0xFF1A1A1A.toInt()
+            )
             scaleType = ImageView.ScaleType.FIT_CENTER
         }
 
@@ -1506,7 +1504,7 @@ class MainActivity : AppCompatActivity() {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { topMargin = dp(8) }
+            ).apply { topMargin = dp(10) }
             text = label
             textSize = 13f
             gravity = Gravity.CENTER
@@ -1531,14 +1529,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         return card
-    }
-
-    private fun roundedSquareDrawable(color: Int): GradientDrawable {
-        return GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
-            cornerRadius = dp(14).toFloat()
-            setColor(color)
-        }
     }
 
     private fun cardRippleBackground(): RippleDrawable {
