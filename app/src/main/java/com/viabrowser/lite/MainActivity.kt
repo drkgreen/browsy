@@ -7,7 +7,9 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
+import android.content.res.ColorStateList
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.RippleDrawable
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -1303,7 +1305,7 @@ class MainActivity : AppCompatActivity() {
         }
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(dp(8), dp(24), dp(8), dp(8))
+            setPadding(dp(8), dp(8), dp(8), dp(8))
         }
 
         val adBlockOn = isAdBlockEnabled()
@@ -1437,10 +1439,34 @@ class MainActivity : AppCompatActivity() {
             }
         )
 
+        rootContainer.addView(buildMenuSectionLabel("TARAYICI"))
         rootContainer.addView(container)
+        rootContainer.addView(buildMenuDivider())
+        rootContainer.addView(buildMenuSectionLabel("BU SAYFA"))
         rootContainer.addView(container2)
         dialog.setContentView(rootContainer)
         dialog.show()
+    }
+
+    private fun buildMenuSectionLabel(text: String): View {
+        return TextView(this).apply {
+            this.text = text
+            textSize = 11f
+            setTextColor(0xFFAEAEB2.toInt())
+            letterSpacing = 0.08f
+            setPadding(dp(20), dp(12), dp(20), dp(4))
+        }
+    }
+
+    private fun buildMenuDivider(): View {
+        return View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1)).apply {
+                topMargin = dp(8)
+                marginStart = dp(20)
+                marginEnd = dp(20)
+            }
+            setBackgroundColor(0xFFEEEEEE.toInt())
+        }
     }
 
     private fun buildFunctionMenuCard(
@@ -1457,12 +1483,15 @@ class MainActivity : AppCompatActivity() {
             isClickable = true
             isFocusable = true
             setPadding(dp(4), dp(8), dp(4), dp(8))
+            background = cardRippleBackground()
             setOnClickListener { onClick() }
         }
 
         val iconView = ImageView(this).apply {
             layoutParams = LinearLayout.LayoutParams(dp(56), dp(56))
-            background = roundedSquareDrawable(if (isActive) 0xFFD32F2F.toInt() else 0xFFF1F0F5.toInt())
+            background = roundedSquareDrawable(
+                if (isActive) ContextCompat.getColor(this@MainActivity, R.color.colorPrimary) else 0xFFF1F0F5.toInt()
+            )
             setPadding(dp(14), dp(14), dp(14), dp(14))
             setImageResource(iconRes)
             setColorFilter(if (isActive) Color.WHITE else 0xFF3C3C43.toInt())
@@ -1506,6 +1535,15 @@ class MainActivity : AppCompatActivity() {
             cornerRadius = dp(16).toFloat()
             setColor(color)
         }
+    }
+
+    private fun cardRippleBackground(): RippleDrawable {
+        val mask = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dp(14).toFloat()
+            setColor(Color.WHITE)
+        }
+        return RippleDrawable(ColorStateList.valueOf(0x1F000000), null, mask)
     }
 
     private fun addCurrentPageToHome() {
