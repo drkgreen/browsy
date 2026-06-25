@@ -294,7 +294,7 @@ class SettingsActivity : AppCompatActivity() {
     private fun getTextZoom(): Int = prefs().getInt("text_zoom", 100)
 
     private fun buildTextZoomRow(): View {
-        return buildSettingsRow("Yazı Boyutu", "%${getTextZoom()}") {
+        return buildSettingsRow("Yazı Boyutu (Varsayılan)", "%${getTextZoom()}") {
             showTextZoomDialog()
         }
     }
@@ -363,7 +363,7 @@ class SettingsActivity : AppCompatActivity() {
         container.addView(seekBar)
 
         AlertDialog.Builder(this)
-            .setTitle("Yazı Boyutu")
+            .setTitle("Yazı Boyutu (Varsayılan)")
             .setView(container)
             .setPositiveButton("Kaydet") { _, _ ->
                 val zoom = seekBar.progress + 50
