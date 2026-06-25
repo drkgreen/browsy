@@ -50,6 +50,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.webkit.WebSettingsCompat
@@ -820,16 +821,18 @@ class MainActivity : AppCompatActivity() {
 
         binding.webView.settings.textZoom = effectiveTextZoomFor(currentHost())
 
-        val textReflow = prefs.getBoolean("text_reflow", false)
-        binding.webView.settings.layoutAlgorithm = if (textReflow) {
-            WebSettings.LayoutAlgorithm.TEXT_AUTOSIZING
-        } else {
-            WebSettings.LayoutAlgorithm.NORMAL
-        }
-
         val forceDark = prefs.getBoolean("force_dark_web", false)
 
-        // FORCE_DARK: eski ama uygulamanın kendi temasından bağımsız, doğrudan zorlayan API.
+        // targetSdk 33+ (Tiramisu) üzerinde web içeriğinin karanlık render edilmesi
+        // doğrudan setForceDark ile değil, uygulamanın kendi temasının (isLightTheme)
+        // karanlık olmasına bağlı. Bu yüzden gerçek anahtar burası: uygulamayı da
+        // karanlık moda zorluyoruz, WebView bunu otomatik yansıtıyor.
+        AppCompatDelegate.setDefaultNightMode(
+            if (forceDark) AppCompatDelegate.MODE_NIGHT_YES else AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
+        )
+
+        // FORCE_DARK: targetSdk >= 33'te resmi olarak no-op, ama eski WebView
+        // sürümleriyle çalışan cihazlar için zararsız bir yedek olarak bırakılıyor.
         if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK)) {
             WebSettingsCompat.setForceDark(
                 binding.webView.settings,
@@ -837,7 +840,8 @@ class MainActivity : AppCompatActivity() {
             )
         }
 
-        // ALGORITHMIC_DARKENING: daha yeni API, FORCE_DARK ile birlikte ayarlanması zararsız.
+        // ALGORITHMIC_DARKENING: yukarıdaki tema değişimiyle birlikte çalışır;
+        // uygulamanın teması karanlık olmadan bu ayar tek başına etkisiz kalır.
         if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
             WebSettingsCompat.setAlgorithmicDarkeningAllowed(binding.webView.settings, forceDark)
         }
