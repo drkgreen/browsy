@@ -55,11 +55,13 @@ import com.viabrowser.lite.databinding.ActivityMainBinding
 import org.json.JSONObject
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.io.BufferedReader
+import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 
-data class BookmarkItem(val title: String, val url: String, var icon: Bitmap? = null)
+data class BookmarkItem(var title: String, var url: String, var icon: Bitmap? = null)
 
 data class TabInfo(
     val id: Long,
@@ -103,6 +105,10 @@ class MainActivity : AppCompatActivity() {
         private const val REQUEST_CODE_LOCATION = 1002
         private const val BOOKMARK_MIME = "application/x-via-bookmark"
         private const val BOOKMARK_DRAG_LABEL = "via_bookmark"
+        private const val ADBLOCK_REMOTE_URL = "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts"
+        private const val ADBLOCK_CACHE_FILE = "adblock_hosts_remote.txt"
+        private const val ADBLOCK_UPDATE_INTERVAL_MS = 7L * 24 * 60 * 60 * 1000 // 7 gün
+        private const val ADBLOCK_MIN_VALID_ENTRIES = 1000
     }
 
     private val longPressHandler = Handler(Looper.getMainLooper())
@@ -110,9 +116,18 @@ class MainActivity : AppCompatActivity() {
     private val adBlockHosts: MutableSet<String> by lazy { loadAdBlockHosts() }
 
     private fun loadAdBlockHosts(): MutableSet<String> {
+        val cacheFile = File(filesDir, ADBLOCK_CACHE_FILE)
+        if (cacheFile.exists()) {
+            val fromCache = parseSimpleHostsList { cacheFile.bufferedReader(Charsets.UTF_8) }
+            if (fromCache.isNotEmpty()) return fromCache
+        }
+        return parseSimpleHostsList { assets.open("adblock_hosts.txt").bufferedReader(Charsets.UTF_8) }
+    }
+
+    private fun parseSimpleHostsList(openReader: () -> BufferedReader): MutableSet<String> {
         val set = HashSet<String>()
         try {
-            assets.open("adblock_hosts.txt").bufferedReader(Charsets.UTF_8).useLines { lines ->
+            openReader().useLines { lines ->
                 lines.forEach { line ->
                     val trimmed = line.trim()
                     if (trimmed.isNotEmpty() && !trimmed.startsWith("#")) {
@@ -121,9 +136,80 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         } catch (e: Exception) {
-            // liste okunamazsa boş set ile devam et, tarayıcı yine çalışır
+            // liste okunamazsa boş set döner, çağıran taraf yedek listeye düşer
         }
         return set
+    }
+
+    // ---- Reklam engelleme listesi: periyodik uzaktan güncelleme ----
+
+    private fun maybeUpdateAdBlockList() {
+        val prefs = getSharedPreferences("via_lite_prefs", MODE_PRIVATE)
+        val lastUpdate = prefs.getLong("adblock_last_update", 0L)
+        val now = System.currentTimeMillis()
+        if (now - lastUpdate < ADBLOCK_UPDATE_INTERVAL_MS) return
+
+        Thread {
+            val downloaded = downloadAdBlockList()
+            if (downloaded != null) {
+                try {
+                    File(filesDir, ADBLOCK_CACHE_FILE).writeText(downloaded.joinToString("\n"), Charsets.UTF_8)
+                    prefs.edit().putLong("adblock_last_update", now).apply()
+                    runOnUiThread {
+                        adBlockHosts.clear()
+                        adBlockHosts.addAll(downloaded)
+                    }
+                } catch (e: Exception) {
+                    // yazma başarısız olursa mevcut liste ile devam edilir
+                }
+            }
+        }.start()
+    }
+
+    private fun downloadAdBlockList(): Set<String>? {
+        var connection: HttpURLConnection? = null
+        return try {
+            connection = URL(ADBLOCK_REMOTE_URL).openConnection() as HttpURLConnection
+            connection.connectTimeout = 8000
+            connection.readTimeout = 15000
+            connection.instanceFollowRedirects = true
+            connection.setRequestProperty(
+                "User-Agent",
+                "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome Mobile Safari/537.36"
+            )
+            connection.connect()
+            if (connection.responseCode != HttpURLConnection.HTTP_OK) return null
+
+            val result = HashSet<String>()
+            val whitespace = Regex("\\s+")
+            connection.inputStream.bufferedReader(Charsets.UTF_8).useLines { lines ->
+                lines.forEach { rawLine ->
+                    val line = rawLine.trim()
+                    if (line.isEmpty() || line.startsWith("#")) return@forEach
+                    val parts = line.split(whitespace)
+                    if (parts.size < 2) return@forEach
+                    val ip = parts[0]
+                    val domain = parts[1].lowercase()
+                    if ((ip == "0.0.0.0" || ip == "127.0.0.1") &&
+                        domain.isNotEmpty() &&
+                        domain != "localhost" &&
+                        domain != "localhost.localdomain" &&
+                        domain != "local" &&
+                        domain != "broadcasthost" &&
+                        !domain.startsWith("ip6-") &&
+                        !domain.startsWith("ff0")
+                    ) {
+                        result.add(domain)
+                    }
+                }
+            }
+            // Beklenmedik şekilde kısa/bozuk bir indirme mevcut listeyi bozmasın
+            if (result.size < ADBLOCK_MIN_VALID_ENTRIES) null else result
+        } catch (e: Exception) {
+            null
+        } finally {
+            connection?.disconnect()
+        }
     }
 
     private fun isAdBlockEnabled(): Boolean {
@@ -157,7 +243,7 @@ class MainActivity : AppCompatActivity() {
 
         loadBookmarks()
         refreshBookmarksGrid()
-        setupBookmarkDeleteZone()
+        maybeUpdateAdBlockList()
 
         tabs.add(TabInfo(id = nextTabId++))
         currentTabIndex = 0
@@ -1773,31 +1859,38 @@ class MainActivity : AppCompatActivity() {
             container.tag = url
 
             var longPressFired = false
+            var dragStarted = false
             var downX = 0f
             var downY = 0f
             val moveTolerance = dp(20)
             val longPressRunnable = Runnable {
                 longPressFired = true
-                startBookmarkDrag(container, url)
+                showBookmarkOptionsPopup(title, url)
             }
             container.setOnTouchListener { touchedView, event ->
                 when (event.actionMasked) {
                     MotionEvent.ACTION_DOWN -> {
                         longPressFired = false
+                        dragStarted = false
                         downX = event.x
                         downY = event.y
                         longPressHandler.postDelayed(longPressRunnable, 500)
                     }
                     MotionEvent.ACTION_MOVE -> {
-                        if (kotlin.math.abs(event.x - downX) > moveTolerance ||
-                            kotlin.math.abs(event.y - downY) > moveTolerance
+                        if (!dragStarted &&
+                            (kotlin.math.abs(event.x - downX) > moveTolerance ||
+                                kotlin.math.abs(event.y - downY) > moveTolerance)
                         ) {
                             longPressHandler.removeCallbacks(longPressRunnable)
+                            if (!longPressFired) {
+                                dragStarted = true
+                                startBookmarkDrag(touchedView, url)
+                            }
                         }
                     }
                     MotionEvent.ACTION_UP -> {
                         longPressHandler.removeCallbacks(longPressRunnable)
-                        if (!longPressFired) {
+                        if (!longPressFired && !dragStarted) {
                             touchedView.performClick()
                         }
                     }
@@ -1873,42 +1966,84 @@ class MainActivity : AppCompatActivity() {
         refreshBookmarksGrid()
     }
 
-    private fun setupBookmarkDeleteZone() {
-        val zone = binding.bookmarkDeleteZone
-        zone.setOnDragListener { view, event ->
-            when (event.action) {
-                DragEvent.ACTION_DRAG_STARTED -> {
-                    val accept = event.clipDescription?.hasMimeType(BOOKMARK_MIME) == true
-                    if (accept) view.alpha = 1f
-                    accept
-                }
-                DragEvent.ACTION_DRAG_ENTERED -> {
-                    view.background = ContextCompat.getDrawable(this, R.drawable.bg_delete_zone_active)
-                    true
-                }
-                DragEvent.ACTION_DRAG_EXITED -> {
-                    view.background = ContextCompat.getDrawable(this, R.drawable.bg_delete_zone)
-                    true
-                }
-                DragEvent.ACTION_DROP -> {
-                    val url = event.localState as? String
-                    if (url != null) {
+    private fun showBookmarkOptionsPopup(title: String, url: String) {
+        val options = arrayOf("Sil", "Düzenle", "Yeni Sekmede Aç")
+        AlertDialog.Builder(this)
+            .setTitle(title)
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> {
                         bookmarks.removeAll { it.url == url }
                         getSharedPreferences("via_lite_prefs", MODE_PRIVATE).edit().remove(faviconKey(url)).apply()
                         saveBookmarksList()
                         refreshBookmarksGrid()
                         Toast.makeText(this, "Yer imi silindi", Toast.LENGTH_SHORT).show()
                     }
-                    true
+                    1 -> showEditBookmarkDialog(url)
+                    2 -> {
+                        addNewTab()
+                        showBrowser()
+                        binding.webView.loadUrl(url)
+                    }
                 }
-                DragEvent.ACTION_DRAG_ENDED -> {
-                    view.background = ContextCompat.getDrawable(this, R.drawable.bg_delete_zone)
-                    view.alpha = 0f
-                    true
-                }
-                else -> true
             }
+            .show()
+    }
+
+    private fun showEditBookmarkDialog(url: String) {
+        val bookmark = bookmarks.find { it.url == url } ?: return
+        val oldUrl = bookmark.url
+
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(24), dp(16), dp(24), 0)
         }
+        val titleInput = EditText(this).apply {
+            hint = "Başlık"
+            setText(bookmark.title)
+        }
+        val urlInput = EditText(this).apply {
+            hint = "URL"
+            inputType = InputType.TYPE_TEXT_VARIATION_URI
+            setText(bookmark.url)
+        }
+        container.addView(titleInput)
+        container.addView(urlInput)
+
+        AlertDialog.Builder(this)
+            .setTitle("Yer İmini Düzenle")
+            .setView(container)
+            .setPositiveButton("Kaydet") { _, _ ->
+                var newUrl = urlInput.text.toString().trim()
+                var newTitle = titleInput.text.toString().trim()
+                if (newUrl.isEmpty()) return@setPositiveButton
+                if (!newUrl.startsWith("http://") && !newUrl.startsWith("https://")) {
+                    newUrl = "https://$newUrl"
+                }
+                if (newTitle.isEmpty()) {
+                    newTitle = newUrl.removePrefix("https://").removePrefix("http://")
+                }
+
+                val urlChanged = oldUrl != newUrl
+                bookmark.title = newTitle
+                bookmark.url = newUrl
+
+                if (urlChanged) {
+                    val prefs = getSharedPreferences("via_lite_prefs", MODE_PRIVATE)
+                    val oldIcon = prefs.getString(faviconKey(oldUrl), null)
+                    prefs.edit().remove(faviconKey(oldUrl)).apply()
+                    if (oldIcon != null) {
+                        prefs.edit().putString(faviconKey(newUrl), oldIcon).apply()
+                    } else {
+                        fetchFaviconAsync(newUrl)
+                    }
+                }
+
+                saveBookmarksList()
+                refreshBookmarksGrid()
+            }
+            .setNegativeButton("Vazgeç", null)
+            .show()
     }
 
     private fun showAddBookmarkDialog() {
