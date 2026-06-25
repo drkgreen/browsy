@@ -36,7 +36,6 @@ import android.webkit.WebStorage
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.EditText
-import android.widget.FrameLayout
 import android.widget.GridLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -911,11 +910,16 @@ class MainActivity : AppCompatActivity() {
 
     private fun hideBars() {
         if (binding.topToolbar.translationY == 0f) {
-            binding.topToolbar.animate().translationY(-binding.topToolbar.height.toFloat()).start()
-            binding.bottomNavBar.animate().translationY(binding.bottomNavBar.height.toFloat()).start()
-            // Barlar gizlenirken içerik alanını hemen tam ekrana genişletiyoruz;
-            // barlar üstüne binmiyor çünkü artık görünür değiller.
-            setWebViewContentInsets(0, 0)
+            binding.topToolbar.animate()
+                .translationY(-binding.topToolbar.height.toFloat())
+                .setDuration(200)
+                .setInterpolator(android.view.animation.AccelerateInterpolator(2f))
+                .start()
+            binding.bottomNavBar.animate()
+                .translationY(binding.bottomNavBar.height.toFloat())
+                .setDuration(200)
+                .setInterpolator(android.view.animation.AccelerateInterpolator(2f))
+                .start()
         }
     }
 
@@ -923,18 +927,14 @@ class MainActivity : AppCompatActivity() {
         if (binding.topToolbar.translationY != 0f || binding.bottomNavBar.translationY != 0f) {
             binding.topToolbar.animate()
                 .translationY(0f)
-                .withEndAction { setWebViewContentInsets(binding.topToolbar.height, binding.bottomNavBar.height) }
+                .setDuration(200)
+                .setInterpolator(android.view.animation.DecelerateInterpolator(2f))
                 .start()
-            binding.bottomNavBar.animate().translationY(0f).start()
-        }
-    }
-
-    private fun setWebViewContentInsets(topInset: Int, bottomInset: Int) {
-        val params = binding.swipeRefresh.layoutParams as? FrameLayout.LayoutParams ?: return
-        if (params.topMargin != topInset || params.bottomMargin != bottomInset) {
-            params.topMargin = topInset
-            params.bottomMargin = bottomInset
-            binding.swipeRefresh.layoutParams = params
+            binding.bottomNavBar.animate()
+                .translationY(0f)
+                .setDuration(200)
+                .setInterpolator(android.view.animation.DecelerateInterpolator(2f))
+                .start()
         }
     }
 
