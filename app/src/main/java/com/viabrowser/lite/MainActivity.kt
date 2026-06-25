@@ -50,11 +50,8 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import androidx.webkit.WebSettingsCompat
-import androidx.webkit.WebViewFeature
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.viabrowser.lite.databinding.ActivityMainBinding
 import org.json.JSONObject
@@ -817,33 +814,36 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun applyAppearanceSettings() {
-        val prefs = getSharedPreferences("via_lite_prefs", MODE_PRIVATE)
-
         binding.webView.settings.textZoom = effectiveTextZoomFor(currentHost())
+        // Web sayfalarının karartılması artık CSS injection ile yapılıyor
+        // (bkz. applyForceDarkIfNeeded), uygulamanın kendi teması bundan etkilenmiyor.
+    }
 
-        val forceDark = prefs.getBoolean("force_dark_web", false)
+    // ---- Web sayfalarını karartma (sadece içerik, uygulama arayüzü etkilenmez) ----
 
-        // targetSdk 33+ (Tiramisu) üzerinde web içeriğinin karanlık render edilmesi
-        // doğrudan setForceDark ile değil, uygulamanın kendi temasının (isLightTheme)
-        // karanlık olmasına bağlı. Bu yüzden gerçek anahtar burası: uygulamayı da
-        // karanlık moda zorluyoruz, WebView bunu otomatik yansıtıyor.
-        AppCompatDelegate.setDefaultNightMode(
-            if (forceDark) AppCompatDelegate.MODE_NIGHT_YES else AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
-        )
+    private fun isForceDarkWebEnabled(): Boolean {
+        return getSharedPreferences("via_lite_prefs", MODE_PRIVATE).getBoolean("force_dark_web", false)
+    }
 
-        // FORCE_DARK: targetSdk >= 33'te resmi olarak no-op, ama eski WebView
-        // sürümleriyle çalışan cihazlar için zararsız bir yedek olarak bırakılıyor.
-        if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK)) {
-            WebSettingsCompat.setForceDark(
-                binding.webView.settings,
-                if (forceDark) WebSettingsCompat.FORCE_DARK_ON else WebSettingsCompat.FORCE_DARK_OFF
-            )
-        }
-
-        // ALGORITHMIC_DARKENING: yukarıdaki tema değişimiyle birlikte çalışır;
-        // uygulamanın teması karanlık olmadan bu ayar tek başına etkisiz kalır.
-        if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
-            WebSettingsCompat.setAlgorithmicDarkeningAllowed(binding.webView.settings, forceDark)
+    private fun applyForceDarkIfNeeded(view: WebView) {
+        if (isForceDarkWebEnabled()) {
+            val js = "(function(){" +
+                "var id='via-force-dark-style';" +
+                "var existing=document.getElementById(id);" +
+                "if(existing)existing.remove();" +
+                "var style=document.createElement('style');" +
+                "style.id=id;" +
+                "style.textContent='html{filter:invert(1) hue-rotate(180deg) !important;background:#fff !important;}' +" +
+                "'img,video,picture,canvas,svg,iframe{filter:invert(1) hue-rotate(180deg) !important;}';" +
+                "document.documentElement.appendChild(style);" +
+                "})();"
+            view.evaluateJavascript(js, null)
+        } else {
+            val js = "(function(){" +
+                "var existing=document.getElementById('via-force-dark-style');" +
+                "if(existing)existing.remove();" +
+                "})();"
+            view.evaluateJavascript(js, null)
         }
     }
 
@@ -1028,6 +1028,7 @@ class MainActivity : AppCompatActivity() {
                 binding.swipeRefresh.isRefreshing = false
                 showBars()
                 applyThemeColorFromPage()
+                applyForceDarkIfNeeded(view)
                 if (currentTab().isDesktopMode) {
                     view.evaluateJavascript(
                         "(function(){var m=document.querySelector('meta[name=viewport]');" +
