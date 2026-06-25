@@ -16,6 +16,7 @@ import android.os.Build
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.os.Message
 import android.text.InputType
 import android.text.TextUtils
 import android.util.Base64
@@ -847,6 +848,8 @@ class MainActivity : AppCompatActivity() {
             displayZoomControls = false
             mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
             setGeolocationEnabled(true)
+            setSupportMultipleWindows(true)
+            javaScriptCanOpenWindowsAutomatically = true
         }
 
         applyAppearanceSettings()
@@ -961,6 +964,23 @@ class MainActivity : AppCompatActivity() {
                         resolveGeoPermission(origin, callback)
                     }
                 }
+            }
+
+            override fun onCreateWindow(
+                view: WebView,
+                isDialog: Boolean,
+                isUserGesture: Boolean,
+                resultMsg: Message
+            ): Boolean {
+                val transport = resultMsg.obj as? WebView.WebViewTransport ?: return false
+                addNewTab()
+                transport.webView = binding.webView
+                resultMsg.sendToTarget()
+                return true
+            }
+
+            override fun onCloseWindow(window: WebView) {
+                closeTab(currentTabIndex)
             }
         }
 
