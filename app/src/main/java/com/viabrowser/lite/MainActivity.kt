@@ -1192,10 +1192,9 @@ class MainActivity : AppCompatActivity() {
 
     private var suppressUrlFocusRevert = false
 
-    // ---- Klavye açılınca alt barı yukarı kaydırma ----
-    // adjustResize, WebView'in kendi klavye davranışıyla çakışıp güvenilmez
-    // olabildiğinden, görünür pencere alanını doğrudan ölçüp farkı kendimiz
-    // alt bara translationY olarak uyguluyoruz.
+    // ---- Klavye açılınca alt barı gizleme ----
+    // Kaydırmak yerine doğrudan gizlemek daha güvenilir: hem klavye animasyonu
+    // sırasında taşma/boşluk riski olmuyor hem de yazarken ekstra alan açılıyor.
 
     private var maxObservedRootHeight = 0
 
@@ -1212,8 +1211,8 @@ class MainActivity : AppCompatActivity() {
             // Klavye genelde ekranın %15'inden daha yüksek bir alan kaplar;
             // bundan düşük farklar durum çubuğu/sistem bar değişimi olabilir.
             val keyboardThreshold = maxObservedRootHeight / 6
-            val keyboardHeight = if (heightDiff > keyboardThreshold) heightDiff else 0
-            binding.bottomNavBar.translationY = -keyboardHeight.toFloat()
+            val keyboardVisible = heightDiff > keyboardThreshold
+            binding.bottomNavBar.visibility = if (keyboardVisible) View.GONE else View.VISIBLE
         }
     }
 
