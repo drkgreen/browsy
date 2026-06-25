@@ -1879,7 +1879,7 @@ class MainActivity : AppCompatActivity() {
             when (event.action) {
                 DragEvent.ACTION_DRAG_STARTED -> {
                     val accept = event.clipDescription?.hasMimeType(BOOKMARK_MIME) == true
-                    if (accept) view.visibility = View.VISIBLE
+                    if (accept) view.alpha = 1f
                     accept
                 }
                 DragEvent.ACTION_DRAG_ENTERED -> {
@@ -1903,7 +1903,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 DragEvent.ACTION_DRAG_ENDED -> {
                     view.background = ContextCompat.getDrawable(this, R.drawable.bg_delete_zone)
-                    view.visibility = View.INVISIBLE
+                    view.alpha = 0f
                     true
                 }
                 else -> true
