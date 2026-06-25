@@ -816,7 +816,7 @@ class MainActivity : AppCompatActivity() {
     private fun applyAppearanceSettings() {
         val prefs = getSharedPreferences("via_lite_prefs", MODE_PRIVATE)
 
-        binding.webView.settings.textZoom = prefs.getInt("text_zoom", 100)
+        binding.webView.settings.textZoom = effectiveTextZoomFor(currentHost())
 
         val textReflow = prefs.getBoolean("text_reflow", false)
         binding.webView.settings.layoutAlgorithm = if (textReflow) {
@@ -839,6 +839,117 @@ class MainActivity : AppCompatActivity() {
         if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
             WebSettingsCompat.setAlgorithmicDarkeningAllowed(binding.webView.settings, forceDark)
         }
+    }
+
+    // ---- Site-özel yazı boyutu ----
+
+    private fun currentHost(): String? = binding.webView.url?.let { Uri.parse(it).host }
+
+    private fun effectiveTextZoomFor(host: String?): Int {
+        val prefs = getSharedPreferences("via_lite_prefs", MODE_PRIVATE)
+        if (host != null) {
+            val siteZoom = getSiteTextZoom(host)
+            if (siteZoom != null) return siteZoom
+        }
+        return prefs.getInt("text_zoom", 100)
+    }
+
+    private fun getSiteTextZoom(host: String): Int? {
+        val raw = getSharedPreferences("via_lite_prefs", MODE_PRIVATE).getString("site_text_zoom", "") ?: ""
+        if (raw.isBlank()) return null
+        raw.split("\n").forEach { line ->
+            val parts = line.split("::")
+            if (parts.size == 2 && parts[0] == host) {
+                return parts[1].toIntOrNull()
+            }
+        }
+        return null
+    }
+
+    private fun setSiteTextZoom(host: String, zoom: Int) {
+        val prefs = getSharedPreferences("via_lite_prefs", MODE_PRIVATE)
+        val raw = prefs.getString("site_text_zoom", "") ?: ""
+        val lines = if (raw.isBlank()) mutableListOf() else raw.split("\n").toMutableList()
+        val filtered = lines.filterNot { it.split("::").getOrNull(0) == host }.toMutableList()
+        filtered.add("$host::$zoom")
+        prefs.edit().putString("site_text_zoom", filtered.joinToString("\n")).apply()
+    }
+
+    private fun showSiteTextZoomDialog() {
+        val host = currentHost()
+        if (host.isNullOrBlank()) {
+            Toast.makeText(this, "Yazı boyutu ayarlanacak bir sayfa yok", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(24), dp(8), dp(24), 0)
+        }
+
+        val currentZoom = effectiveTextZoomFor(host)
+
+        val previewBox = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(16), dp(16), dp(16))
+            background = GradientDrawable().apply {
+                setColor(0xFFF5F5F5.toInt())
+                cornerRadius = dp(8).toFloat()
+            }
+        }
+
+        val previewText = TextView(this).apply {
+            text = "Örnek metin böyle görünecek."
+            setTextColor(0xFF1A1A1A.toInt())
+            textSize = 16f * (currentZoom / 100f)
+        }
+        previewBox.addView(previewText)
+
+        val hostLabel = TextView(this).apply {
+            text = host
+            textSize = 12f
+            gravity = Gravity.CENTER
+            setTextColor(0xFF8E8E93.toInt())
+            setPadding(0, 0, 0, dp(4))
+        }
+
+        val valueLabel = TextView(this).apply {
+            text = "%$currentZoom"
+            textSize = 13f
+            gravity = Gravity.CENTER
+            setTextColor(0xFF8E8E93.toInt())
+            setPadding(0, dp(12), 0, dp(4))
+        }
+
+        val seekBar = android.widget.SeekBar(this).apply {
+            max = 150 // 50 ile 200 arası, +50 ekleyerek gerçek yüzdeye çeviriyoruz
+            progress = (currentZoom - 50).coerceIn(0, 150)
+        }
+        seekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: android.widget.SeekBar, progress: Int, fromUser: Boolean) {
+                val zoom = progress + 50
+                valueLabel.text = "%$zoom"
+                previewText.textSize = 16f * (zoom / 100f)
+            }
+            override fun onStartTrackingTouch(seekBar: android.widget.SeekBar) {}
+            override fun onStopTrackingTouch(seekBar: android.widget.SeekBar) {}
+        })
+
+        container.addView(hostLabel)
+        container.addView(previewBox)
+        container.addView(valueLabel)
+        container.addView(seekBar)
+
+        AlertDialog.Builder(this)
+            .setTitle("Yazı Boyutu — Bu Site")
+            .setView(container)
+            .setPositiveButton("Kaydet") { _, _ ->
+                val zoom = seekBar.progress + 50
+                setSiteTextZoom(host, zoom)
+                binding.webView.settings.textZoom = zoom
+            }
+            .setNegativeButton("Vazgeç", null)
+            .show()
     }
 
     private fun setupWebView() {
@@ -903,6 +1014,7 @@ class MainActivity : AppCompatActivity() {
             override fun onPageFinished(view: WebView, url: String) {
                 super.onPageFinished(view, url)
                 currentTab().url = url
+                view.settings.textZoom = effectiveTextZoomFor(Uri.parse(url).host)
                 if (!binding.editUrl.hasFocus()) {
                     binding.editUrl.setText(view.title?.takeIf { it.isNotBlank() } ?: url)
                 }
@@ -1298,6 +1410,18 @@ class MainActivity : AppCompatActivity() {
             ) {
                 dialog.dismiss()
                 toggleDesktopMode()
+            }
+        )
+
+        container2.addView(
+            buildFunctionMenuCard(
+                iconRes = R.drawable.ic_text_size,
+                label = "Yazı Boyutu",
+                statusText = "%${effectiveTextZoomFor(currentHost())}",
+                isActive = false
+            ) {
+                dialog.dismiss()
+                showSiteTextZoomDialog()
             }
         )
 
