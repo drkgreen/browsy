@@ -2,6 +2,7 @@ package com.viabrowser.lite
 
 import android.Manifest
 import android.app.DownloadManager
+import android.content.ClipData
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -11,12 +12,14 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.os.Build
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.text.InputType
 import android.text.TextUtils
 import android.util.Base64
+import android.view.DragEvent
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -98,6 +101,8 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private const val REQUEST_CODE_CAMERA_MIC = 1001
         private const val REQUEST_CODE_LOCATION = 1002
+        private const val BOOKMARK_MIME = "application/x-via-bookmark"
+        private const val BOOKMARK_DRAG_LABEL = "via_bookmark"
     }
 
     private val longPressHandler = Handler(Looper.getMainLooper())
@@ -152,6 +157,7 @@ class MainActivity : AppCompatActivity() {
 
         loadBookmarks()
         refreshBookmarksGrid()
+        setupBookmarkDeleteZone()
 
         tabs.add(TabInfo(id = nextTabId++))
         currentTabIndex = 0
@@ -1764,13 +1770,15 @@ class MainActivity : AppCompatActivity() {
         // ScrollView içinde standart uzun-basma algılayıcısı en ufak kaydırma
         // titremesinde iptal olabiliyor; bu yüzden kendi toleranslı algılayıcımızı kuruyoruz.
         if (!isAddTile && url != null) {
+            container.tag = url
+
             var longPressFired = false
             var downX = 0f
             var downY = 0f
             val moveTolerance = dp(20)
             val longPressRunnable = Runnable {
                 longPressFired = true
-                showDeleteBookmarkDialog(title, url)
+                startBookmarkDrag(container, url)
             }
             container.setOnTouchListener { touchedView, event ->
                 when (event.actionMasked) {
@@ -1799,23 +1807,108 @@ class MainActivity : AppCompatActivity() {
                 }
                 true
             }
+
+            container.setOnDragListener { dragView, event ->
+                val draggedUrl = event.localState as? String
+                when (event.action) {
+                    DragEvent.ACTION_DRAG_STARTED -> {
+                        val accept = event.clipDescription?.hasMimeType(BOOKMARK_MIME) == true
+                        if (accept && draggedUrl == url) {
+                            dragView.alpha = 0.3f
+                        }
+                        accept
+                    }
+                    DragEvent.ACTION_DRAG_ENTERED -> {
+                        if (draggedUrl != url) {
+                            dragView.setBackgroundColor(0x33000000)
+                        }
+                        true
+                    }
+                    DragEvent.ACTION_DRAG_EXITED -> {
+                        dragView.background = null
+                        true
+                    }
+                    DragEvent.ACTION_DROP -> {
+                        dragView.background = null
+                        if (draggedUrl != null) {
+                            moveBookmark(draggedUrl, url)
+                        }
+                        true
+                    }
+                    DragEvent.ACTION_DRAG_ENDED -> {
+                        dragView.alpha = 1f
+                        dragView.background = null
+                        true
+                    }
+                    else -> true
+                }
+            }
         }
 
         return container
     }
 
-    private fun showDeleteBookmarkDialog(title: String, url: String) {
-        AlertDialog.Builder(this)
-            .setTitle("Yer İmini Sil")
-            .setMessage("\"$title\" silinsin mi?")
-            .setPositiveButton("Sil") { _, _ ->
-                bookmarks.removeAll { it.url == url }
-                getSharedPreferences("via_lite_prefs", MODE_PRIVATE).edit().remove(faviconKey(url)).apply()
-                saveBookmarksList()
-                refreshBookmarksGrid()
+    // ---- Yer imi sürükle-bırak (sıralama ve silme) ----
+
+    private fun startBookmarkDrag(view: View, url: String) {
+        val item = ClipData.Item(url)
+        val clipData = ClipData(BOOKMARK_DRAG_LABEL, arrayOf(BOOKMARK_MIME), item)
+        val shadowBuilder = View.DragShadowBuilder(view)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            view.startDragAndDrop(clipData, shadowBuilder, url, 0)
+        } else {
+            @Suppress("DEPRECATION")
+            view.startDrag(clipData, shadowBuilder, url, 0)
+        }
+    }
+
+    private fun moveBookmark(fromUrl: String, toUrl: String) {
+        if (fromUrl == toUrl) return
+        val fromIndex = bookmarks.indexOfFirst { it.url == fromUrl }
+        val toIndex = bookmarks.indexOfFirst { it.url == toUrl }
+        if (fromIndex == -1 || toIndex == -1) return
+        val item = bookmarks.removeAt(fromIndex)
+        bookmarks.add(toIndex, item)
+        saveBookmarksList()
+        refreshBookmarksGrid()
+    }
+
+    private fun setupBookmarkDeleteZone() {
+        val zone = binding.bookmarkDeleteZone
+        zone.setOnDragListener { view, event ->
+            when (event.action) {
+                DragEvent.ACTION_DRAG_STARTED -> {
+                    val accept = event.clipDescription?.hasMimeType(BOOKMARK_MIME) == true
+                    if (accept) view.visibility = View.VISIBLE
+                    accept
+                }
+                DragEvent.ACTION_DRAG_ENTERED -> {
+                    view.background = ContextCompat.getDrawable(this, R.drawable.bg_delete_zone_active)
+                    true
+                }
+                DragEvent.ACTION_DRAG_EXITED -> {
+                    view.background = ContextCompat.getDrawable(this, R.drawable.bg_delete_zone)
+                    true
+                }
+                DragEvent.ACTION_DROP -> {
+                    val url = event.localState as? String
+                    if (url != null) {
+                        bookmarks.removeAll { it.url == url }
+                        getSharedPreferences("via_lite_prefs", MODE_PRIVATE).edit().remove(faviconKey(url)).apply()
+                        saveBookmarksList()
+                        refreshBookmarksGrid()
+                        Toast.makeText(this, "Yer imi silindi", Toast.LENGTH_SHORT).show()
+                    }
+                    true
+                }
+                DragEvent.ACTION_DRAG_ENDED -> {
+                    view.background = ContextCompat.getDrawable(this, R.drawable.bg_delete_zone)
+                    view.visibility = View.GONE
+                    true
+                }
+                else -> true
             }
-            .setNegativeButton("Vazgeç", null)
-            .show()
+        }
     }
 
     private fun showAddBookmarkDialog() {
