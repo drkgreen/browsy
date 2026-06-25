@@ -2,6 +2,7 @@ package com.viabrowser.lite
 
 import android.content.Intent
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
@@ -292,16 +293,8 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun getTextZoom(): Int = prefs().getInt("text_zoom", 100)
 
-    private fun textZoomDisplayName(zoom: Int): String = when (zoom) {
-        80 -> "Küçük"
-        100 -> "Normal"
-        120 -> "Büyük"
-        150 -> "Çok Büyük"
-        else -> "%$zoom"
-    }
-
     private fun buildTextZoomRow(): View {
-        return buildSettingsRow("Yazı Boyutu", textZoomDisplayName(getTextZoom())) {
+        return buildSettingsRow("Yazı Boyutu", "%${getTextZoom()}") {
             showTextZoomDialog()
         }
     }
@@ -320,15 +313,64 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private fun showTextZoomDialog() {
-        val zooms = intArrayOf(80, 100, 120, 150)
-        val labels = arrayOf("Küçük", "Normal", "Büyük", "Çok Büyük")
-        val checkedIndex = zooms.indexOf(getTextZoom()).let { if (it == -1) 1 else it }
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(24), dp(8), dp(24), 0)
+        }
+
+        val currentZoom = getTextZoom()
+
+        val previewBox = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(16), dp(16), dp(16))
+            background = GradientDrawable().apply {
+                setColor(0xFFF5F5F5.toInt())
+                cornerRadius = dp(8).toFloat()
+            }
+        }
+
+        val previewText = TextView(this).apply {
+            text = "Örnek metin böyle görünecek."
+            setTextColor(0xFF1A1A1A.toInt())
+            textSize = 16f * (currentZoom / 100f)
+        }
+        previewBox.addView(previewText)
+
+        val valueLabel = TextView(this).apply {
+            text = "%$currentZoom"
+            textSize = 13f
+            gravity = Gravity.CENTER
+            setTextColor(0xFF8E8E93.toInt())
+            setPadding(0, dp(12), 0, dp(4))
+        }
+
+        val seekBar = android.widget.SeekBar(this).apply {
+            max = 150 // 50 ile 200 arası, +50 ekleyerek gerçek yüzdeye çeviriyoruz
+            progress = (currentZoom - 50).coerceIn(0, 150)
+        }
+        seekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: android.widget.SeekBar, progress: Int, fromUser: Boolean) {
+                val zoom = progress + 50
+                valueLabel.text = "%$zoom"
+                previewText.textSize = 16f * (zoom / 100f)
+            }
+            override fun onStartTrackingTouch(seekBar: android.widget.SeekBar) {}
+            override fun onStopTrackingTouch(seekBar: android.widget.SeekBar) {}
+        })
+
+        container.addView(previewBox)
+        container.addView(valueLabel)
+        container.addView(seekBar)
 
         AlertDialog.Builder(this)
             .setTitle("Yazı Boyutu")
-            .setSingleChoiceItems(labels, checkedIndex) { dialog, which ->
-                prefs().edit().putInt("text_zoom", zooms[which]).apply()
-                dialog.dismiss()
+            .setView(container)
+            .setPositiveButton("Kaydet") { _, _ ->
+                val zoom = seekBar.progress + 50
+                prefs().edit()
+                    .putInt("text_zoom", zoom)
+                    .putBoolean("pending_appearance_reload", true)
+                    .apply()
                 buildSettingsList()
             }
             .setNegativeButton("Vazgeç", null)
