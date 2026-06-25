@@ -136,7 +136,7 @@
                 android:background="@drawable/bg_delete_zone"
                 android:gravity="center"
                 android:orientation="horizontal"
-                android:visibility="gone">
+                android:visibility="invisible">
 
                 <ImageView
                     android:layout_width="20dp"
