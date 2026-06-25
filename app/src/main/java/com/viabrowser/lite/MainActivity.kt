@@ -928,10 +928,19 @@ class MainActivity : AppCompatActivity() {
             "img, table, pre, video, iframe { max-width: 100% !important; height: auto !important; } " +
             "p, div, span, li, td, h1, h2, h3, h4, h5, h6 { word-wrap: break-word !important; overflow-wrap: break-word !important; }"
         val js = "(function(){" +
+            "function applyFix(){" +
+            "var meta=document.querySelector('meta[name=\"viewport\"]');" +
+            "if(!meta){meta=document.createElement('meta');meta.setAttribute('name','viewport');document.head.appendChild(meta);}" +
+            "meta.setAttribute('content','width=device-width, initial-scale=1.0');" +
+            "if(!document.getElementById('vialite-reflow-style')){" +
             "var style=document.createElement('style');" +
-            "style.type='text/css';" +
+            "style.id='vialite-reflow-style';" +
             "style.innerHTML=" + org.json.JSONObject.quote(css) + ";" +
             "document.head.appendChild(style);" +
+            "}" +
+            "}" +
+            "applyFix();" +
+            "setTimeout(applyFix,800);" +
             "})();"
         binding.webView.evaluateJavascript(js, null)
     }
@@ -1128,18 +1137,6 @@ class MainActivity : AppCompatActivity() {
             ) {
                 dialog.dismiss()
                 showHistoryList()
-            }
-        )
-
-        container.addView(
-            buildFunctionMenuCard(
-                iconRes = R.drawable.ic_autofill,
-                label = "Otomatik Doldur",
-                statusText = null,
-                isActive = false
-            ) {
-                dialog.dismiss()
-                showAddressFillList()
             }
         )
 
