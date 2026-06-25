@@ -1002,6 +1002,14 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
+            override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
+                super.onPageStarted(view, url, favicon)
+                // Yazı boyutu sayfa boyanmadan önce uygulanmalı; aksi halde
+                // kullanıcı önce varsayılan boyutla render edilen sayfayı
+                // görüp sonra site-özel boyuta "zıpladığını" fark ediyor.
+                view.settings.textZoom = effectiveTextZoomFor(Uri.parse(url).host)
+            }
+
             override fun shouldInterceptRequest(
                 view: WebView,
                 request: WebResourceRequest
