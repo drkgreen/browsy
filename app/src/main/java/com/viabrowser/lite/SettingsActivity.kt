@@ -57,6 +57,8 @@ class SettingsActivity : AppCompatActivity() {
         binding.settingsContainer.addView(buildDivider())
         binding.settingsContainer.addView(buildStartPageRow())
         binding.settingsContainer.addView(buildDivider())
+        binding.settingsContainer.addView(buildStartupBehaviorRow())
+        binding.settingsContainer.addView(buildDivider())
         binding.settingsContainer.addView(buildDefaultBrowserRow())
 
         binding.settingsContainer.addView(buildSectionHeader("Görünüm"))
@@ -169,6 +171,33 @@ class SettingsActivity : AppCompatActivity() {
             .setTitle("Arama Motoru")
             .setSingleChoiceItems(options, checkedIndex) { dialog, which ->
                 prefs().edit().putString("search_engine", keys[which]).apply()
+                dialog.dismiss()
+                buildSettingsList()
+            }
+            .setNegativeButton("Vazgeç", null)
+            .show()
+    }
+
+    // ---- Başlangıç davranışı ----
+
+    private fun isResumeSessionEnabled(): Boolean = prefs().getString("startup_behavior", "start_page") == "resume_session"
+
+    private fun buildStartupBehaviorRow(): View {
+        val subtitle = if (isResumeSessionEnabled()) "Kaldığım yerden devam et" else "Açılış sayfasını göster"
+        return buildSettingsRow("Başlangıç Davranışı", subtitle, R.drawable.ic_tabs) {
+            showStartupBehaviorDialog()
+        }
+    }
+
+    private fun showStartupBehaviorDialog() {
+        val options = arrayOf("Açılış sayfasını göster", "Kaldığım yerden devam et")
+        val checkedIndex = if (isResumeSessionEnabled()) 1 else 0
+
+        AlertDialog.Builder(this)
+            .setTitle("Başlangıç Davranışı")
+            .setSingleChoiceItems(options, checkedIndex) { dialog, which ->
+                val value = if (which == 1) "resume_session" else "start_page"
+                prefs().edit().putString("startup_behavior", value).apply()
                 dialog.dismiss()
                 buildSettingsList()
             }
