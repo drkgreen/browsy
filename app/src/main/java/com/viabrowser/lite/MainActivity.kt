@@ -74,7 +74,8 @@ data class TabInfo(
     var url: String? = null,
     var favicon: Bitmap? = null,
     var webViewState: Bundle? = null,
-    var isDesktopMode: Boolean = false
+    var isDesktopMode: Boolean = false,
+    var openerTabId: Long? = null
 )
 
 data class SitePermission(val host: String, val type: String, var decision: String)
@@ -1801,15 +1802,16 @@ class MainActivity : AppCompatActivity() {
     // (örn. addNewTab()'ın about:blank yüklemesi) Chromium'un render
     // sürecini çökertip uygulamayı kapatabiliyor.
     private fun prepareNewTabForPopup() {
+        val openerId = currentTab().id
         saveCurrentTabState()
-        tabs.add(TabInfo(id = nextTabId++))
+        tabs.add(TabInfo(id = nextTabId++, openerTabId = openerId))
         currentTabIndex = tabs.size - 1
         applyDesktopModeSetting(currentTab().isDesktopMode)
         showBrowser()
         updateTabCountBadge()
     }
 
-    private fun closeTab(index: Int) {
+    private fun closeTab(index: Int, switchToIndex: Int? = null) {
         if (index !in tabs.indices) return
 
         if (tabs.size <= 1) {
@@ -1821,17 +1823,33 @@ class MainActivity : AppCompatActivity() {
 
         val wasCurrent = index == currentTabIndex
         tabs.removeAt(index)
-        if (index < currentTabIndex) {
+
+        if (switchToIndex != null) {
+            // Belirli bir sekmeye (örn. açan/opener sekme) kesin olarak dönülüyor;
+            // index kaydırma listeden çıkarma sonrası yeniden hesaplanıyor.
+            currentTabIndex = if (switchToIndex > index) switchToIndex - 1 else switchToIndex
+        } else if (index < currentTabIndex) {
             currentTabIndex -= 1
         } else if (wasCurrent && currentTabIndex >= tabs.size) {
             currentTabIndex = tabs.size - 1
         }
 
-        if (wasCurrent) {
+        if (wasCurrent || switchToIndex != null) {
             restoreCurrentTab()
         } else {
             updateTabCountBadge()
         }
+    }
+
+    // Geri tuşuyla sekme kapatılırken Chrome/Safari'nin davranışı: listede
+    // sırayla önceki sekmeye değil, bu sekmeyi AÇAN (opener) sekmeye dönülür.
+    // Bu, kullanıcı araya başka sekmeler açıp/gezip sonra geri tuşuna bassa
+    // bile her zaman doğru sekmeye dönülmesini garantiliyor.
+    private fun closeCurrentTabReturningToOpener() {
+        val closingTab = currentTab()
+        val openerId = closingTab.openerTabId
+        val openerIndex = if (openerId != null) tabs.indexOfFirst { it.id == openerId } else -1
+        closeTab(currentTabIndex, switchToIndex = if (openerIndex != -1) openerIndex else null)
     }
 
     private fun showTabSwitcher() {
@@ -2542,7 +2560,7 @@ class MainActivity : AppCompatActivity() {
             return true
         }
         if (tabs.size > 1) {
-            closeTab(currentTabIndex)
+            closeCurrentTabReturningToOpener()
             return true
         }
         return false
