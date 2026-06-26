@@ -1491,7 +1491,9 @@ class MainActivity : AppCompatActivity() {
         }
         scrollView.addView(container)
 
-        tabs.forEachIndexed { index, tab ->
+        // En son açılan sekme listede en üstte görünsün; ama gerçek index
+        // (switchToTab/closeTab için) değişmiyor, sadece görüntüleme sırası.
+        tabs.withIndex().toList().asReversed().forEach { (index, tab) ->
             container.addView(buildTabRow(tab, index, dialog))
         }
         container.addView(buildAddTabRow(dialog))
@@ -1718,13 +1720,21 @@ class MainActivity : AppCompatActivity() {
             closeCurrentTabReturningToOpener()
             return true
         }
-        return false
+        showExitConfirmationDialog()
+        return true
+    }
+
+    private fun showExitConfirmationDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("Çıkmak istiyor musunuz?")
+            .setMessage("Browsy'den çıkmak istediğinize emin misiniz?")
+            .setPositiveButton("Evet") { _, _ -> finishAffinity() }
+            .setNegativeButton("Hayır", null)
+            .show()
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        if (keyCode == KeyEvent.KEYCODE_BACK &&
-            binding.browserRoot.visibility == View.VISIBLE
-        ) {
+        if (keyCode == KeyEvent.KEYCODE_BACK) {
             if (handleBackNavigation()) {
                 return true
             }
