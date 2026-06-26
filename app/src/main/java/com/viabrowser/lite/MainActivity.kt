@@ -35,7 +35,6 @@ import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
-import android.webkit.WebStorage
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
@@ -1501,16 +1500,6 @@ class MainActivity : AppCompatActivity() {
         val wasCurrent = index == currentTabIndex
         val closedTab = tabManager.closeTab(index, switchToIndex) ?: return
         destroyTabWebView(closedTab)
-
-        // Son gizli sekme de kapandıysa, o oturuma ait çerez/depo verisini temizle.
-        // NOT: CookieManager uygulama genelinde paylaşılan tek bir nesne olduğundan,
-        // o anda AÇIK normal bir sekme varsa onun çerezleri de etkilenebilir --
-        // WebView'in tasarımı sekme bazlı tam izolasyona izin vermiyor.
-        if (closedTab.isPrivate && tabs.none { it.isPrivate }) {
-            CookieManager.getInstance().removeAllCookies(null)
-            CookieManager.getInstance().flush()
-            WebStorage.getInstance().deleteAllData()
-        }
 
         if (wasCurrent || switchToIndex != null) {
             restoreCurrentTab()
