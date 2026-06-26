@@ -1107,18 +1107,6 @@ class MainActivity : AppCompatActivity() {
 
         container.addView(
             buildFunctionMenuCard(
-                iconRes = R.drawable.ic_settings,
-                label = "Ayarlar",
-                statusText = null,
-                isActive = false
-            ) {
-                dialog.dismiss()
-                startActivity(Intent(this, SettingsActivity::class.java))
-            }
-        )
-
-        container.addView(
-            buildFunctionMenuCard(
                 iconRes = R.drawable.ic_download,
                 label = "İndirilenler",
                 statusText = null,
@@ -1141,6 +1129,22 @@ class MainActivity : AppCompatActivity() {
                     showBrowser()
                     currentWebView().loadUrl(url)
                 }
+            }
+        )
+
+        container.addView(
+            buildFunctionMenuCard(
+                iconRes = R.drawable.ic_bookmark,
+                label = "Yer İmine Ekle",
+                statusText = null,
+                isActive = false
+            ) {
+                dialog.dismiss()
+                bookmarksManager.addCurrentPageToHome(
+                    currentWebView().url,
+                    currentWebView().title,
+                    currentWebView().favicon
+                )
             }
         )
 
@@ -1197,22 +1201,6 @@ class MainActivity : AppCompatActivity() {
             }
         )
 
-        container2.addView(
-            buildFunctionMenuCard(
-                iconRes = R.drawable.ic_bookmark,
-                label = "Yer İmine Ekle",
-                statusText = null,
-                isActive = false
-            ) {
-                dialog.dismiss()
-                bookmarksManager.addCurrentPageToHome(
-                    currentWebView().url,
-                    currentWebView().title,
-                    currentWebView().favicon
-                )
-            }
-        )
-
         val utilityRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.END or Gravity.CENTER_VERTICAL
@@ -1222,6 +1210,23 @@ class MainActivity : AppCompatActivity() {
         utilityRow.addView(
             ImageView(this).apply {
                 layoutParams = LinearLayout.LayoutParams(dp(44), dp(44))
+                background = cardRippleBackground()
+                setPadding(dp(10), dp(10), dp(10), dp(10))
+                setImageResource(R.drawable.ic_settings)
+                setColorFilter(0xFF1A1A1A.toInt())
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                isClickable = true
+                isFocusable = true
+                setOnClickListener {
+                    dialog.dismiss()
+                    startActivity(Intent(this@MainActivity, SettingsActivity::class.java))
+                }
+            }
+        )
+
+        utilityRow.addView(
+            ImageView(this).apply {
+                layoutParams = LinearLayout.LayoutParams(dp(44), dp(44)).apply { marginStart = dp(8) }
                 background = cardRippleBackground()
                 setPadding(dp(10), dp(10), dp(10), dp(10))
                 setImageResource(R.drawable.ic_power)
