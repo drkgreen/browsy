@@ -61,6 +61,26 @@ class TabManager {
         return closed
     }
 
+    /** Verilen index dışındaki tüm sekmeleri kapatır, döndürdüğü liste WebView'leri temizlenmesi gerekenlerdir. */
+    fun closeAllExcept(index: Int): List<TabInfo> {
+        if (index !in tabs.indices) return emptyList()
+        val keep = tabs[index]
+        val removed = tabs.filterIndexed { i, _ -> i != index }
+        tabs.clear()
+        tabs.add(keep)
+        currentTabIndex = 0
+        return removed
+    }
+
+    /** Tüm sekmeleri kapatır, yerine tek boş bir sekme oluşturur. */
+    fun closeAll(): List<TabInfo> {
+        val removed = tabs.toList()
+        tabs.clear()
+        tabs.add(TabInfo(id = nextId()))
+        currentTabIndex = 0
+        return removed
+    }
+
     /** Verilen sekmeyi açan (opener) sekmenin index'ini bulur, yoksa -1 döner. */
     fun indexOfOpener(tab: TabInfo): Int {
         val openerId = tab.openerTabId ?: return -1
