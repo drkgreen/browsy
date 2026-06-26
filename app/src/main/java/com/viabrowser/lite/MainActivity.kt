@@ -1611,35 +1611,18 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        val textContainer = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
+        val titleView = TextView(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 0,
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 1f
             ).apply { marginStart = dp(12) }
-        }
-
-        val titleView = TextView(this).apply {
             text = tab.title
             textSize = 15f
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
             setTextColor(if (tab.isPrivate) Color.WHITE else 0xFF1A1A1A.toInt())
         }
-
-        val urlView = TextView(this).apply {
-            text = tab.url?.removePrefix("https://")?.removePrefix("http://")?.removeSuffix("/") ?: ""
-            textSize = 13f
-            maxLines = 1
-            ellipsize = TextUtils.TruncateAt.END
-            setPadding(0, dp(2), 0, 0)
-            setTextColor(if (tab.isPrivate) 0xFFAEAEAE.toInt() else 0xFF8E8E93.toInt())
-            visibility = if (tab.url.isNullOrBlank()) View.GONE else View.VISIBLE
-        }
-
-        textContainer.addView(titleView)
-        textContainer.addView(urlView)
 
         val closeView = ImageView(this).apply {
             layoutParams = LinearLayout.LayoutParams(dp(36), dp(36))
@@ -1655,7 +1638,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         row.addView(iconView)
-        row.addView(textContainer)
+        row.addView(titleView)
         row.addView(closeView)
         return row
     }
