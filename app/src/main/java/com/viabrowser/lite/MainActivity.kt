@@ -1298,10 +1298,7 @@ class MainActivity : AppCompatActivity() {
 
         // Alt bar
         binding.btnBottomBack.setOnClickListener {
-            if (binding.webView.canGoBack()) {
-                showBrowser()
-                binding.webView.goBack()
-            }
+            handleBackNavigation()
         }
         binding.btnBottomForward.setOnClickListener {
             if (binding.webView.canGoForward()) {
@@ -2512,13 +2509,30 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        if (keyCode == KeyEvent.KEYCODE_BACK &&
-            binding.browserRoot.visibility == View.VISIBLE &&
-            binding.webView.canGoBack()
-        ) {
+    // Geri tuşu: önce sekme içi geçmiş, yoksa (ve birden fazla sekme açıksa)
+    // bu sekmeyi kapatıp önceki sekmeye dön -- özellikle target="_blank" ile
+    // açılan yeni sekmelerde geçmiş olmadığından bu davranış olmazsa geri
+    // tuşu uygulamayı kapatmaya çalışırdı.
+    private fun handleBackNavigation(): Boolean {
+        if (binding.webView.canGoBack()) {
+            showBrowser()
             binding.webView.goBack()
             return true
+        }
+        if (tabs.size > 1) {
+            closeTab(currentTabIndex)
+            return true
+        }
+        return false
+    }
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_BACK &&
+            binding.browserRoot.visibility == View.VISIBLE
+        ) {
+            if (handleBackNavigation()) {
+                return true
+            }
         }
         return super.onKeyDown(keyCode, event)
     }
