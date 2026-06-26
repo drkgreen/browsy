@@ -1028,6 +1028,13 @@ class MainActivity : AppCompatActivity() {
                 // kullanıcı önce varsayılan boyutla render edilen sayfayı
                 // görüp sonra site-özel boyuta "zıpladığını" fark ediyor.
                 view.settings.textZoom = effectiveTextZoomFor(Uri.parse(url).host)
+                // Sekme değişiminde geçmişi temizleme: bazı URL'lerde (örn. # içeren)
+                // onPageStarted tetiklenmeyebiliyor, bu yüzden hem burada hem
+                // onPageFinished'da kontrol ediyoruz (Cordova'nın kullandığı desen).
+                if (pendingClearHistory) {
+                    view.clearHistory()
+                    pendingClearHistory = false
+                }
             }
 
             override fun shouldInterceptRequest(
@@ -1049,6 +1056,10 @@ class MainActivity : AppCompatActivity() {
 
             override fun onPageFinished(view: WebView, url: String) {
                 super.onPageFinished(view, url)
+                if (pendingClearHistory) {
+                    view.clearHistory()
+                    pendingClearHistory = false
+                }
                 currentTab().url = url
                 view.settings.textZoom = effectiveTextZoomFor(Uri.parse(url).host)
                 if (!binding.editUrl.hasFocus()) {
@@ -1169,8 +1180,8 @@ class MainActivity : AppCompatActivity() {
                         if (handled || url == null || url == "about:blank") return
                         handled = true
                         prepareNewTabForPopup()
+                        pendingClearHistory = true
                         binding.webView.loadUrl(url)
-                        binding.webView.clearHistory()
                         v.stopLoading()
                         v.post { v.destroy() }
                     }
@@ -1247,6 +1258,7 @@ class MainActivity : AppCompatActivity() {
     // sırasında taşma/boşluk riski olmuyor hem de yazarken ekstra alan açılıyor.
 
     private var maxObservedRootHeight = 0
+    private var pendingClearHistory = false
 
     private fun setupKeyboardAvoidance() {
         val rootView = binding.root
@@ -1739,21 +1751,23 @@ class MainActivity : AppCompatActivity() {
             !tab.url.isNullOrBlank() -> {
                 // loadUrl, restoreState gibi geçmişi tamamen değiştirmiyor;
                 // önceki sekmenin back-stack'i paylaşılan WebView'de kalır.
-                // clearHistory bunu temizleyip bu sekmeyi gerçekten "yeni"
-                // bir gezinme noktası yapıyor.
+                // pendingClearHistory bunu onPageStarted/onPageFinished'da
+                // temizleyip bu sekmeyi gerçekten "yeni" bir gezinme noktası
+                // yapıyor (clearHistory'yi loadUrl'den hemen sonra çağırmak
+                // timing sorunları nedeniyle güvenilir değil).
+                pendingClearHistory = true
                 binding.webView.loadUrl(tab.url!!)
-                binding.webView.clearHistory()
                 showBrowser()
             }
             else -> {
                 val customUrl = getCustomStartUrlIfEnabled()
                 if (!customUrl.isNullOrBlank()) {
+                    pendingClearHistory = true
                     binding.webView.loadUrl(customUrl)
-                    binding.webView.clearHistory()
                     showBrowser()
                 } else {
+                    pendingClearHistory = true
                     binding.webView.loadUrl("about:blank")
-                    binding.webView.clearHistory()
                     showHomeScreen()
                 }
             }
