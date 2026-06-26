@@ -1153,8 +1153,29 @@ class MainActivity : AppCompatActivity() {
                 resultMsg: Message
             ): Boolean {
                 val transport = resultMsg.obj as? WebView.WebViewTransport ?: return false
-                prepareNewTabForPopup()
-                transport.webView = binding.webView
+
+                // Chromium'un resmi dokümantasyonu: onCreateWindow için mevcut bir
+                // WebView'i yeniden kullanmak desteklenmiyor ("it is better to not
+                // reuse an existing WebView") -- denenirse sessizce (hatasız) başarısız
+                // oluyor ve render sürecini çökertebiliyor. Paylaşılan tek WebView
+                // mimarimiz olduğundan, popup'ın gerçekte gitmek istediği URL'yi
+                // yakalamak için tek seferlik, görünmez bir "yakalayıcı" WebView
+                // kullanıyoruz; gerçek içerik normal sekme akışımızla açılıyor.
+                var handled = false
+                val catcherWebView = WebView(this)
+                catcherWebView.settings.javaScriptEnabled = true
+                catcherWebView.webViewClient = object : WebViewClient() {
+                    override fun onPageStarted(v: WebView, url: String?, favicon: Bitmap?) {
+                        if (handled || url == null || url == "about:blank") return
+                        handled = true
+                        prepareNewTabForPopup()
+                        binding.webView.loadUrl(url)
+                        v.stopLoading()
+                        v.post { v.destroy() }
+                    }
+                }
+
+                transport.webView = catcherWebView
                 resultMsg.sendToTarget()
                 return true
             }
