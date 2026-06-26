@@ -25,6 +25,7 @@ import android.text.InputType
 import android.text.TextUtils
 import android.text.TextWatcher
 import android.util.Base64
+import android.util.Log
 import android.view.DragEvent
 import android.view.Gravity
 import android.view.KeyEvent
@@ -35,6 +36,7 @@ import android.view.inputmethod.InputMethodManager
 import android.webkit.CookieManager
 import android.webkit.GeolocationPermissions
 import android.webkit.PermissionRequest
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.URLUtil
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -985,6 +987,24 @@ class MainActivity : AppCompatActivity() {
         }
 
         webView.webViewClient = object : WebViewClient() {
+            override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+                // KRİTİK: bu callback override edilmezse, WebView'in render
+                // süreci herhangi bir sebeple (bellek baskısı, belirli site
+                // içeriği, GPU sürücü sorunu) çökerse Android varsayılan
+                // olarak TÜM UYGULAMA SÜRECİNİ sonlandırıyor (geriye dönük
+                // uyumluluk için bilinçli bir tasarım kararı). Burada true
+                // döndürüp aynı WebView üzerinde reload() çağırmak, render
+                // sürecini sessizce yeniden başlatıp uygulamanın açık
+                // kalmasını sağlıyor.
+                if (detail.didCrash()) {
+                    Log.e("Browsy", "WebView render süreci çöktü, yeniden yükleniyor")
+                } else {
+                    Log.w("Browsy", "Sistem WebView render sürecini bellek kazanmak için sonlandırdı, yeniden yükleniyor")
+                }
+                view.reload()
+                return true
+            }
+
             override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean {
                 if (url.startsWith("http://") || url.startsWith("https://")) {
                     return false
