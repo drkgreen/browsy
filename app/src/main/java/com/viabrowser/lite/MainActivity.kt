@@ -237,9 +237,41 @@ class MainActivity : AppCompatActivity() {
         bookmarksManager.refreshBookmarksGrid()
         maybeUpdateAdBlockList()
 
-        tabs.add(TabInfo(id = tabManager.nextId()))
+        val resumeSession = getSharedPreferences("via_lite_prefs", MODE_PRIVATE)
+            .getString("startup_behavior", "start_page") == "resume_session"
+        val sessionTabs = if (resumeSession) loadSessionTabs() else emptyList()
+
+        if (sessionTabs.isNotEmpty()) {
+            sessionTabs.forEach { (url, title) ->
+                tabs.add(TabInfo(id = tabManager.nextId(), url = url, title = title))
+            }
+        } else {
+            tabs.add(TabInfo(id = tabManager.nextId()))
+        }
         currentTabIndex = 0
         restoreCurrentTab()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        saveSessionTabs()
+    }
+
+    // ---- Oturum kalıcılığı (kaldığım yerden devam et) ----
+
+    private fun saveSessionTabs() {
+        saveCurrentTabState()
+        val raw = tabs.joinToString("\n") { tab -> "${tab.url ?: ""}::${tab.title}" }
+        getSharedPreferences("via_lite_prefs", MODE_PRIVATE).edit().putString("session_tabs", raw).apply()
+    }
+
+    private fun loadSessionTabs(): List<Pair<String, String>> {
+        val raw = getSharedPreferences("via_lite_prefs", MODE_PRIVATE).getString("session_tabs", "") ?: ""
+        if (raw.isBlank()) return emptyList()
+        return raw.split("\n").mapNotNull { line ->
+            val parts = line.split("::")
+            if (parts.size == 2 && parts[0].isNotBlank()) parts[0] to parts[1] else null
+        }
     }
 
     override fun onResume() {
