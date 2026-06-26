@@ -726,19 +726,28 @@ class MainActivity : AppCompatActivity() {
 
             override fun onPageFinished(view: WebView, url: String) {
                 super.onPageFinished(view, url)
-                currentTab().url = url
+                // KRİTİK: view, arka plandaki (görünmeyen) bir sekmenin WebView'i
+                // olabilir -- örn. bir yönlendirme tamamlanırken kullanıcı zaten
+                // başka bir sekmeye geçmiş olabilir. Bu durumda currentTab()
+                // kullanmak aktif sekmenin verisini yanlışlıkla ezerdi; bu yüzden
+                // önce view'in GERÇEKTEN hangi sekmeye ait olduğunu buluyoruz.
+                val tab = tabs.find { it.webView === view } ?: return
+                tab.url = url
                 view.settings.textZoom = effectiveTextZoomFor(Uri.parse(url).host)
+                if (!tab.isPrivate) {
+                    historyManager.addHistoryEntry(view.title?.takeIf { it.isNotBlank() } ?: url, url)
+                }
+
+                if (tab !== currentTab()) return
+
                 if (!binding.editUrl.hasFocus()) {
                     binding.editUrl.setText(view.title?.takeIf { it.isNotBlank() } ?: url)
-                }
-                if (!currentTab().isPrivate) {
-                    historyManager.addHistoryEntry(view.title?.takeIf { it.isNotBlank() } ?: url, url)
                 }
                 binding.swipeRefresh.isRefreshing = false
                 showBars()
                 applyThemeColorFromPage()
                 applyForceDarkIfNeeded(view)
-                if (currentTab().isDesktopMode) {
+                if (tab.isDesktopMode) {
                     view.evaluateJavascript(
                         "(function(){var m=document.querySelector('meta[name=viewport]');" +
                             "if(!m){m=document.createElement('meta');m.setAttribute('name','viewport');document.head.appendChild(m);}" +
@@ -1549,18 +1558,28 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun buildTabRow(tab: TabInfo, index: Int, dialog: BottomSheetDialog): View {
+        val isActive = index == currentTabIndex
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(12), dp(12), dp(12), dp(12))
-            if (tab.isPrivate) {
-                setBackgroundColor(0xFF2B2B2B.toInt())
-            }
+            setBackgroundColor(
+                when {
+                    tab.isPrivate && isActive -> 0xFF3D3D3D.toInt()
+                    tab.isPrivate -> 0xFF2B2B2B.toInt()
+                    isActive -> 0xFFE8F0FE.toInt()
+                    else -> Color.TRANSPARENT
+                }
+            )
             isClickable = true
             isFocusable = true
             setOnClickListener {
                 switchToTab(index)
                 dialog.dismiss()
+            }
+            setOnLongClickListener {
+                showTabLongPressMenu(index, dialog)
+                true
             }
         }
 
@@ -1592,18 +1611,35 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        val titleView = TextView(this).apply {
+        val textContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(
                 0,
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 1f
             ).apply { marginStart = dp(12) }
+        }
+
+        val titleView = TextView(this).apply {
             text = tab.title
             textSize = 15f
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
             setTextColor(if (tab.isPrivate) Color.WHITE else 0xFF1A1A1A.toInt())
         }
+
+        val urlView = TextView(this).apply {
+            text = tab.url?.removePrefix("https://")?.removePrefix("http://")?.removeSuffix("/") ?: ""
+            textSize = 13f
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+            setPadding(0, dp(2), 0, 0)
+            setTextColor(if (tab.isPrivate) 0xFFAEAEAE.toInt() else 0xFF8E8E93.toInt())
+            visibility = if (tab.url.isNullOrBlank()) View.GONE else View.VISIBLE
+        }
+
+        textContainer.addView(titleView)
+        textContainer.addView(urlView)
 
         val closeView = ImageView(this).apply {
             layoutParams = LinearLayout.LayoutParams(dp(36), dp(36))
@@ -1619,9 +1655,35 @@ class MainActivity : AppCompatActivity() {
         }
 
         row.addView(iconView)
-        row.addView(titleView)
+        row.addView(textContainer)
         row.addView(closeView)
         return row
+    }
+
+    private fun showTabLongPressMenu(index: Int, switcherDialog: BottomSheetDialog) {
+        val options = arrayOf("Sekmeyi Kapat", "Diğer Sekmeleri Kapat", "Tüm Sekmeleri Kapat")
+        AlertDialog.Builder(this)
+            .setItems(options) { _, which ->
+                switcherDialog.dismiss()
+                when (which) {
+                    0 -> closeTab(index)
+                    1 -> closeOtherTabs(index)
+                    2 -> closeAllTabsAction()
+                }
+            }
+            .show()
+    }
+
+    private fun closeOtherTabs(index: Int) {
+        val removed = tabManager.closeAllExcept(index)
+        removed.forEach { destroyTabWebView(it) }
+        restoreCurrentTab()
+    }
+
+    private fun closeAllTabsAction() {
+        val removed = tabManager.closeAll()
+        removed.forEach { destroyTabWebView(it) }
+        restoreCurrentTab()
     }
 
     private fun buildAddTabRow(dialog: BottomSheetDialog): View {
