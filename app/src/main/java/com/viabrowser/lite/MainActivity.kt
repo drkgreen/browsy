@@ -837,6 +837,14 @@ class MainActivity : AppCompatActivity() {
         binding.swipeRefresh.setOnRefreshListener {
             currentWebView().reload()
         }
+        // SwipeRefreshLayout varsayılan olarak doğrudan alt view'inin (webViewContainer,
+        // sade bir FrameLayout) kaydırılabilirliğine bakıyor -- FrameLayout'un kendisi hiç
+        // kaydırılamadığından bu kontrol her zaman "üstte" sonucu veriyor ve sayfa nerede
+        // olursa olsun her aşağı çekişte yenileme tetikleniyordu. Asıl kaydırma durumunu
+        // o anki aktif sekmenin WebView'inden okuyarak bunu düzeltiyoruz.
+        binding.swipeRefresh.setOnChildScrollUpCallback { _, _ ->
+            currentWebView().scrollY > 0
+        }
     }
 
     private fun setupWebView() {
