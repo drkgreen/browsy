@@ -70,16 +70,6 @@ import java.net.URLEncoder
 
 data class BookmarkItem(var title: String, var url: String, var icon: Bitmap? = null)
 
-data class TabInfo(
-    val id: Long,
-    var title: String = "Yeni Sekme",
-    var url: String? = null,
-    var favicon: Bitmap? = null,
-    var isDesktopMode: Boolean = false,
-    var openerTabId: Long? = null,
-    var webView: NestedScrollWebView? = null
-)
-
 data class SitePermission(val host: String, val type: String, var decision: String)
 
 data class DownloadRecord(val fileName: String, val url: String, val timestamp: Long)
@@ -101,9 +91,11 @@ class MainActivity : AppCompatActivity() {
 
     private val bookmarks = mutableListOf<BookmarkItem>()
 
-    private val tabs = mutableListOf<TabInfo>()
-    private var currentTabIndex = 0
-    private var nextTabId = 1L
+    private val tabManager = TabManager()
+    private val tabs: MutableList<TabInfo> get() = tabManager.tabs
+    private var currentTabIndex: Int
+        get() = tabManager.currentTabIndex
+        set(value) { tabManager.currentTabIndex = value }
 
     private var pendingWebPermissionRequest: PermissionRequest? = null
     private var pendingGeoPermissionCallback: GeolocationPermissions.Callback? = null
@@ -116,7 +108,7 @@ class MainActivity : AppCompatActivity() {
         private const val BOOKMARK_DRAG_LABEL = "via_bookmark"
         private const val ADBLOCK_REMOTE_URL = "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts"
         private const val ADBLOCK_CACHE_FILE = "adblock_hosts_remote.txt"
-        private const val ADBLOCK_UPDATE_INTERVAL_MS = 7L * 24 * 60 * 60 * 1000 // 7 gün
+        private const val ADBLOCK_UPDATE_INTERVAL_MS = 7L * 24 * 60 * 60 * 1000 // 7 gÃ¼n
         private const val ADBLOCK_MIN_VALID_ENTRIES = 1000
         private const val DESKTOP_USER_AGENT =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
@@ -148,12 +140,12 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         } catch (e: Exception) {
-            // liste okunamazsa boş set döner, çağıran taraf yedek listeye düşer
+            // liste okunamazsa boÅŸ set dÃ¶ner, Ã§aÄŸÄ±ran taraf yedek listeye dÃ¼ÅŸer
         }
         return set
     }
 
-    // ---- Reklam engelleme listesi: periyodik uzaktan güncelleme ----
+    // ---- Reklam engelleme listesi: periyodik uzaktan gÃ¼ncelleme ----
 
     private fun maybeUpdateAdBlockList() {
         val prefs = getSharedPreferences("via_lite_prefs", MODE_PRIVATE)
@@ -172,7 +164,7 @@ class MainActivity : AppCompatActivity() {
                         adBlockHosts.addAll(downloaded)
                     }
                 } catch (e: Exception) {
-                    // yazma başarısız olursa mevcut liste ile devam edilir
+                    // yazma baÅŸarÄ±sÄ±z olursa mevcut liste ile devam edilir
                 }
             }
         }.start()
@@ -215,7 +207,7 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
             }
-            // Beklenmedik şekilde kısa/bozuk bir indirme mevcut listeyi bozmasın
+            // Beklenmedik ÅŸekilde kÄ±sa/bozuk bir indirme mevcut listeyi bozmasÄ±n
             if (result.size < ADBLOCK_MIN_VALID_ENTRIES) null else result
         } catch (e: Exception) {
             null
@@ -235,7 +227,7 @@ class MainActivity : AppCompatActivity() {
     private fun isHostBlocked(host: String): Boolean {
         if (host.isEmpty()) return false
         if (adBlockHosts.contains(host)) return true
-        // Alt domainler için üst domainleri de kontrol et (örn. pubads.g.doubleclick.net -> doubleclick.net)
+        // Alt domainler iÃ§in Ã¼st domainleri de kontrol et (Ã¶rn. pubads.g.doubleclick.net -> doubleclick.net)
         var idx = host.indexOf('.')
         while (idx != -1) {
             val parent = host.substring(idx + 1)
@@ -258,7 +250,7 @@ class MainActivity : AppCompatActivity() {
         refreshBookmarksGrid()
         maybeUpdateAdBlockList()
 
-        tabs.add(TabInfo(id = nextTabId++))
+        tabs.add(TabInfo(id = tabManager.nextId()))
         currentTabIndex = 0
         restoreCurrentTab()
     }
@@ -272,10 +264,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        // Artık her sekme kendi WebView'ine sahip olduğundan, Activity
-        // kapanırken hepsini açıkça yok etmemiz gerekiyor -- aksi halde
-        // her biri native kaynaklarını (render süreci bağlantısı vb.)
-        // tutmaya devam edip bellek sızıntısına yol açabilir.
+        // ArtÄ±k her sekme kendi WebView'ine sahip olduÄŸundan, Activity
+        // kapanÄ±rken hepsini aÃ§Ä±kÃ§a yok etmemiz gerekiyor -- aksi halde
+        // her biri native kaynaklarÄ±nÄ± (render sÃ¼reci baÄŸlantÄ±sÄ± vb.)
+        // tutmaya devam edip bellek sÄ±zÄ±ntÄ±sÄ±na yol aÃ§abilir.
         tabs.forEach { tab ->
             tab.webView?.let {
                 (it.parent as? ViewGroup)?.removeView(it)
@@ -331,12 +323,12 @@ class MainActivity : AppCompatActivity() {
 
         if (askBeforeDownload) {
             AlertDialog.Builder(this)
-                .setTitle("Dosyayı İndir")
+                .setTitle("DosyayÄ± Ä°ndir")
                 .setMessage("\"$fileName\" indirilsin mi?")
-                .setPositiveButton("İndir") { _, _ ->
+                .setPositiveButton("Ä°ndir") { _, _ ->
                     enqueueDownload(url, userAgent, mimeType, fileName)
                 }
-                .setNegativeButton("Vazgeç", null)
+                .setNegativeButton("VazgeÃ§", null)
                 .show()
         } else {
             enqueueDownload(url, userAgent, mimeType, fileName)
@@ -352,7 +344,7 @@ class MainActivity : AppCompatActivity() {
                 setMimeType(mimeType)
                 addRequestHeader("User-Agent", userAgent)
                 setTitle(fileName)
-                setDescription("İndiriliyor...")
+                setDescription("Ä°ndiriliyor...")
                 setNotificationVisibility(
                     if (showNotifications) {
                         DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED
@@ -365,9 +357,9 @@ class MainActivity : AppCompatActivity() {
             val downloadManager = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
             downloadManager.enqueue(request)
             addDownloadRecord(fileName, url)
-            Toast.makeText(this, "İndiriliyor: $fileName", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Ä°ndiriliyor: $fileName", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
-            Toast.makeText(this, "İndirme başlatılamadı", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Ä°ndirme baÅŸlatÄ±lamadÄ±", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -409,7 +401,7 @@ class MainActivity : AppCompatActivity() {
         if (list.isEmpty()) {
             container.addView(
                 TextView(this).apply {
-                    text = "Henüz indirilen dosya yok"
+                    text = "HenÃ¼z indirilen dosya yok"
                     setPadding(dp(16), dp(16), dp(16), dp(16))
                     setTextColor(0xFF8E8E93.toInt())
                 }
@@ -495,7 +487,7 @@ class MainActivity : AppCompatActivity() {
         if (list.isEmpty()) {
             container.addView(
                 TextView(this).apply {
-                    text = "Kayıtlı adres yok. Ayarlar > Otomatik Doldurma'dan ekleyebilirsin."
+                    text = "KayÄ±tlÄ± adres yok. Ayarlar > Otomatik Doldurma'dan ekleyebilirsin."
                     setPadding(dp(16), dp(16), dp(16), dp(16))
                     setTextColor(0xFF8E8E93.toInt())
                 }
@@ -572,7 +564,7 @@ class MainActivity : AppCompatActivity() {
         Toast.makeText(this, "Adres dolduruldu", Toast.LENGTH_SHORT).show()
     }
 
-    // ---- Geçmiş ----
+    // ---- GeÃ§miÅŸ ----
 
     private fun loadHistory(): MutableList<HistoryEntry> {
         val raw = getSharedPreferences("via_lite_prefs", MODE_PRIVATE).getString("history", "") ?: ""
@@ -591,15 +583,15 @@ class MainActivity : AppCompatActivity() {
     private fun addHistoryEntry(title: String, url: String) {
         val list = loadHistory()
         val now = System.currentTimeMillis()
-        // Yönlendirme zincirleri veya tekrarlı tetiklenmeler aynı gezinmeyi
-        // birden fazla kayıt olarak eklemesin diye, son kayıt çok yakın zamanda
-        // eklenmişse onu güncelliyoruz, yeni satır eklemiyoruz.
+        // YÃ¶nlendirme zincirleri veya tekrarlÄ± tetiklenmeler aynÄ± gezinmeyi
+        // birden fazla kayÄ±t olarak eklemesin diye, son kayÄ±t Ã§ok yakÄ±n zamanda
+        // eklenmiÅŸse onu gÃ¼ncelliyoruz, yeni satÄ±r eklemiyoruz.
         if (list.isNotEmpty() && (now - list[0].timestamp) < 3000) {
             list[0] = HistoryEntry(title, url, now)
         } else {
             list.add(0, HistoryEntry(title, url, now))
         }
-        // Listeyi gereksiz büyümesin diye en fazla 200 kayıtla sınırlıyoruz.
+        // Listeyi gereksiz bÃ¼yÃ¼mesin diye en fazla 200 kayÄ±tla sÄ±nÄ±rlÄ±yoruz.
         while (list.size > 200) {
             list.removeAt(list.size - 1)
         }
@@ -618,7 +610,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         val clearRow = TextView(this).apply {
-            text = "Geçmişi Temizle"
+            text = "GeÃ§miÅŸi Temizle"
             textSize = 14f
             setTextColor(0xFFD32F2F.toInt())
             setPadding(dp(16), dp(14), dp(16), dp(14))
@@ -627,7 +619,7 @@ class MainActivity : AppCompatActivity() {
             setOnClickListener {
                 clearHistory()
                 dialog.dismiss()
-                Toast.makeText(this@MainActivity, "Geçmiş temizlendi", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@MainActivity, "GeÃ§miÅŸ temizlendi", Toast.LENGTH_SHORT).show()
             }
         }
 
@@ -641,7 +633,7 @@ class MainActivity : AppCompatActivity() {
         if (list.isEmpty()) {
             container.addView(
                 TextView(this).apply {
-                    text = "Geçmiş boş"
+                    text = "GeÃ§miÅŸ boÅŸ"
                     setPadding(dp(16), dp(16), dp(16), dp(16))
                     setTextColor(0xFF8E8E93.toInt())
                 }
@@ -731,9 +723,9 @@ class MainActivity : AppCompatActivity() {
     private fun showSitePermissionDialog(host: String, types: List<String>, request: PermissionRequest) {
         val typeNames = types.joinToString(" ve ") { permissionDisplayName(it) }
         AlertDialog.Builder(this)
-            .setTitle("İzin İsteği")
-            .setMessage("$host, $typeNames erişimi istiyor. İzin verilsin mi?")
-            .setPositiveButton("İzin Ver") { _, _ ->
+            .setTitle("Ä°zin Ä°steÄŸi")
+            .setMessage("$host, $typeNames eriÅŸimi istiyor. Ä°zin verilsin mi?")
+            .setPositiveButton("Ä°zin Ver") { _, _ ->
                 types.forEach { setSitePermissionDecision(host, it, "allow") }
                 resolveWebPermissionRequest(host, request)
             }
@@ -843,11 +835,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun applyAppearanceSettings() {
         currentWebView().settings.textZoom = effectiveTextZoomFor(currentHost())
-        // Web sayfalarının karartılması artık CSS injection ile yapılıyor
-        // (bkz. applyForceDarkIfNeeded), uygulamanın kendi teması bundan etkilenmiyor.
+        // Web sayfalarÄ±nÄ±n karartÄ±lmasÄ± artÄ±k CSS injection ile yapÄ±lÄ±yor
+        // (bkz. applyForceDarkIfNeeded), uygulamanÄ±n kendi temasÄ± bundan etkilenmiyor.
     }
 
-    // ---- Web sayfalarını karartma (sadece içerik, uygulama arayüzü etkilenmez) ----
+    // ---- Web sayfalarÄ±nÄ± karartma (sadece iÃ§erik, uygulama arayÃ¼zÃ¼ etkilenmez) ----
 
     private fun isForceDarkWebEnabled(): Boolean {
         return getSharedPreferences("via_lite_prefs", MODE_PRIVATE).getBoolean("force_dark_web", false)
@@ -875,7 +867,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ---- Site-özel yazı boyutu ----
+    // ---- Site-Ã¶zel yazÄ± boyutu ----
 
     private fun currentHost(): String? = currentWebView().url?.let { Uri.parse(it).host }
 
@@ -912,7 +904,7 @@ class MainActivity : AppCompatActivity() {
     private fun showSiteTextZoomDialog() {
         val host = currentHost()
         if (host.isNullOrBlank()) {
-            Toast.makeText(this, "Yazı boyutu ayarlanacak bir sayfa yok", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "YazÄ± boyutu ayarlanacak bir sayfa yok", Toast.LENGTH_SHORT).show()
             return
         }
 
@@ -933,7 +925,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         val previewText = TextView(this).apply {
-            text = "Örnek metin böyle görünecek."
+            text = "Ã–rnek metin bÃ¶yle gÃ¶rÃ¼necek."
             setTextColor(0xFF1A1A1A.toInt())
             textSize = 16f * (currentZoom / 100f)
         }
@@ -956,7 +948,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         val seekBar = android.widget.SeekBar(this).apply {
-            max = 150 // 50 ile 200 arası, +50 ekleyerek gerçek yüzdeye çeviriyoruz
+            max = 150 // 50 ile 200 arasÄ±, +50 ekleyerek gerÃ§ek yÃ¼zdeye Ã§eviriyoruz
             progress = (currentZoom - 50).coerceIn(0, 150)
         }
         seekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
@@ -975,14 +967,14 @@ class MainActivity : AppCompatActivity() {
         container.addView(seekBar)
 
         AlertDialog.Builder(this)
-            .setTitle("Yazı Boyutu — Bu Site")
+            .setTitle("YazÄ± Boyutu â€” Bu Site")
             .setView(container)
             .setPositiveButton("Kaydet") { _, _ ->
                 val zoom = seekBar.progress + 50
                 setSiteTextZoom(host, zoom)
                 currentWebView().settings.textZoom = zoom
             }
-            .setNegativeButton("Vazgeç", null)
+            .setNegativeButton("VazgeÃ§", null)
             .show()
     }
 
@@ -1002,9 +994,9 @@ class MainActivity : AppCompatActivity() {
         return webView
     }
 
-    // Konteynerdeki o anki sekmenin WebView'ini gösterip eski sekmenin
-    // WebView'ini ayırıyor (yok etmiyor -- bellekte saklı kalıyor, sekmeler
-    // arası gezinti, scroll pozisyonu ve geçmiş kaybolmuyor).
+    // Konteynerdeki o anki sekmenin WebView'ini gÃ¶sterip eski sekmenin
+    // WebView'ini ayÄ±rÄ±yor (yok etmiyor -- bellekte saklÄ± kalÄ±yor, sekmeler
+    // arasÄ± gezinti, scroll pozisyonu ve geÃ§miÅŸ kaybolmuyor).
     private fun activateCurrentTabWebView(): NestedScrollWebView {
         val webView = currentWebView()
         binding.webViewContainer.removeAllViews()
@@ -1051,18 +1043,18 @@ class MainActivity : AppCompatActivity() {
 
         webView.webViewClient = object : WebViewClient() {
             override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
-                // KRİTİK: bu callback override edilmezse, WebView'in render
-                // süreci herhangi bir sebeple (bellek baskısı, belirli site
-                // içeriği, GPU sürücü sorunu) çökerse Android varsayılan
-                // olarak TÜM UYGULAMA SÜRECİNİ sonlandırıyor (geriye dönük
-                // uyumluluk için bilinçli bir tasarım kararı). Burada true
-                // döndürüp aynı WebView üzerinde reload() çağırmak, render
-                // sürecini sessizce yeniden başlatıp uygulamanın açık
-                // kalmasını sağlıyor.
+                // KRÄ°TÄ°K: bu callback override edilmezse, WebView'in render
+                // sÃ¼reci herhangi bir sebeple (bellek baskÄ±sÄ±, belirli site
+                // iÃ§eriÄŸi, GPU sÃ¼rÃ¼cÃ¼ sorunu) Ã§Ã¶kerse Android varsayÄ±lan
+                // olarak TÃœM UYGULAMA SÃœRECÄ°NÄ° sonlandÄ±rÄ±yor (geriye dÃ¶nÃ¼k
+                // uyumluluk iÃ§in bilinÃ§li bir tasarÄ±m kararÄ±). Burada true
+                // dÃ¶ndÃ¼rÃ¼p aynÄ± WebView Ã¼zerinde reload() Ã§aÄŸÄ±rmak, render
+                // sÃ¼recini sessizce yeniden baÅŸlatÄ±p uygulamanÄ±n aÃ§Ä±k
+                // kalmasÄ±nÄ± saÄŸlÄ±yor.
                 if (detail.didCrash()) {
-                    Log.e("Browsy", "WebView render süreci çöktü, yeniden yükleniyor")
+                    Log.e("Browsy", "WebView render sÃ¼reci Ã§Ã¶ktÃ¼, yeniden yÃ¼kleniyor")
                 } else {
-                    Log.w("Browsy", "Sistem WebView render sürecini bellek kazanmak için sonlandırdı, yeniden yükleniyor")
+                    Log.w("Browsy", "Sistem WebView render sÃ¼recini bellek kazanmak iÃ§in sonlandÄ±rdÄ±, yeniden yÃ¼kleniyor")
                 }
                 view.reload()
                 return true
@@ -1080,16 +1072,16 @@ class MainActivity : AppCompatActivity() {
                     }
                     true
                 } catch (e: Exception) {
-                    // ayrıştırılamayan veya açılamayan şema; sessizce yok say
+                    // ayrÄ±ÅŸtÄ±rÄ±lamayan veya aÃ§Ä±lamayan ÅŸema; sessizce yok say
                     true
                 }
             }
 
             override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
                 super.onPageStarted(view, url, favicon)
-                // Yazı boyutu sayfa boyanmadan önce uygulanmalı; aksi halde
-                // kullanıcı önce varsayılan boyutla render edilen sayfayı
-                // görüp sonra site-özel boyuta "zıpladığını" fark ediyor.
+                // YazÄ± boyutu sayfa boyanmadan Ã¶nce uygulanmalÄ±; aksi halde
+                // kullanÄ±cÄ± Ã¶nce varsayÄ±lan boyutla render edilen sayfayÄ±
+                // gÃ¶rÃ¼p sonra site-Ã¶zel boyuta "zÄ±pladÄ±ÄŸÄ±nÄ±" fark ediyor.
                 view.settings.textZoom = effectiveTextZoomFor(Uri.parse(url).host)
             }
 
@@ -1194,9 +1186,9 @@ class MainActivity : AppCompatActivity() {
                     val decision = getSitePermissionDecision(host, "location")
                     if (decision == null) {
                         AlertDialog.Builder(this@MainActivity)
-                            .setTitle("Konum İzni")
-                            .setMessage("$host, konumunuza erişmek istiyor. İzin verilsin mi?")
-                            .setPositiveButton("İzin Ver") { _, _ ->
+                            .setTitle("Konum Ä°zni")
+                            .setMessage("$host, konumunuza eriÅŸmek istiyor. Ä°zin verilsin mi?")
+                            .setPositiveButton("Ä°zin Ver") { _, _ ->
                                 setSitePermissionDecision(host, "location", "allow")
                                 resolveGeoPermission(origin, callback)
                             }
@@ -1220,13 +1212,13 @@ class MainActivity : AppCompatActivity() {
             ): Boolean {
                 val transport = resultMsg.obj as? WebView.WebViewTransport ?: return false
 
-                // Chromium'un resmi dokümantasyonu: onCreateWindow için mevcut bir
+                // Chromium'un resmi dokÃ¼mantasyonu: onCreateWindow iÃ§in mevcut bir
                 // WebView'i yeniden kullanmak desteklenmiyor ("it is better to not
-                // reuse an existing WebView") -- denenirse sessizce (hatasız) başarısız
-                // oluyor ve render sürecini çökertebiliyor. Bu yüzden popup'ın gerçekte
-                // gitmek istediği URL'yi yakalamak için tek seferlik, görünmez bir
-                // "yakalayıcı" WebView kullanıyoruz; gerçek içerik tamamen YENİ bir
-                // sekmenin kendi (yeni oluşturulan) WebView'inde açılıyor.
+                // reuse an existing WebView") -- denenirse sessizce (hatasÄ±z) baÅŸarÄ±sÄ±z
+                // oluyor ve render sÃ¼recini Ã§Ã¶kertebiliyor. Bu yÃ¼zden popup'Ä±n gerÃ§ekte
+                // gitmek istediÄŸi URL'yi yakalamak iÃ§in tek seferlik, gÃ¶rÃ¼nmez bir
+                // "yakalayÄ±cÄ±" WebView kullanÄ±yoruz; gerÃ§ek iÃ§erik tamamen YENÄ° bir
+                // sekmenin kendi (yeni oluÅŸturulan) WebView'inde aÃ§Ä±lÄ±yor.
                 var handled = false
                 val catcherWebView = WebView(this@MainActivity)
                 catcherWebView.settings.javaScriptEnabled = true
@@ -1236,9 +1228,9 @@ class MainActivity : AppCompatActivity() {
                         handled = true
                         val newTab = prepareNewTabForPopup()
                         newTab.url = url
-                        // Gerçek sayfa başlığı yüklenene kadar (onReceivedTitle)
-                        // sekme listesinde "Yeni Sekme" yerine bağlantının
-                        // adresini göster.
+                        // GerÃ§ek sayfa baÅŸlÄ±ÄŸÄ± yÃ¼klenene kadar (onReceivedTitle)
+                        // sekme listesinde "Yeni Sekme" yerine baÄŸlantÄ±nÄ±n
+                        // adresini gÃ¶ster.
                         newTab.title = url.removePrefix("https://").removePrefix("http://")
                         restoreCurrentTab()
                         v.stopLoading()
@@ -1262,8 +1254,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupWebView() {
-        // AppBarLayout üst barı native olarak (gerçek dokunma fiziğiyle senkronize)
-        // kaydırınca gizleyip gösteriyor. Alt barı da aynı orana göre kaydırarak
+        // AppBarLayout Ã¼st barÄ± native olarak (gerÃ§ek dokunma fiziÄŸiyle senkronize)
+        // kaydÄ±rÄ±nca gizleyip gÃ¶steriyor. Alt barÄ± da aynÄ± orana gÃ¶re kaydÄ±rarak
         // ikisini birlikte hareket ettiriyoruz.
         binding.appBarLayout.addOnOffsetChangedListener { layout, verticalOffset ->
             val range = layout.totalScrollRange
@@ -1314,11 +1306,13 @@ class MainActivity : AppCompatActivity() {
 
     private var suppressUrlFocusRevert = false
 
-    // ---- Klavye açılınca alt barı gizleme ----
-    // Kaydırmak yerine doğrudan gizlemek daha güvenilir: hem klavye animasyonu
-    // sırasında taşma/boşluk riski olmuyor hem de yazarken ekstra alan açılıyor.
+    // ---- Klavye aÃ§Ä±lÄ±nca alt barÄ± gizleme ----
+    // KaydÄ±rmak yerine doÄŸrudan gizlemek daha gÃ¼venilir: hem klavye animasyonu
+    // sÄ±rasÄ±nda taÅŸma/boÅŸluk riski olmuyor hem de yazarken ekstra alan aÃ§Ä±lÄ±yor.
 
     private var maxObservedRootHeight = 0
+    private val suggestionsHandler = Handler(Looper.getMainLooper())
+    private val searchSuggestionsProvider = SearchSuggestionsProvider()
 
     private fun setupKeyboardAvoidance() {
         val rootView = binding.root
@@ -1330,8 +1324,8 @@ class MainActivity : AppCompatActivity() {
                 maxObservedRootHeight = visibleHeight
             }
             val heightDiff = maxObservedRootHeight - visibleHeight
-            // Klavye genelde ekranın %15'inden daha yüksek bir alan kaplar;
-            // bundan düşük farklar durum çubuğu/sistem bar değişimi olabilir.
+            // Klavye genelde ekranÄ±n %15'inden daha yÃ¼ksek bir alan kaplar;
+            // bundan dÃ¼ÅŸÃ¼k farklar durum Ã§ubuÄŸu/sistem bar deÄŸiÅŸimi olabilir.
             val keyboardThreshold = maxObservedRootHeight / 6
             val keyboardVisible = heightDiff > keyboardThreshold
             binding.bottomNavBar.visibility = if (keyboardVisible) View.GONE else View.VISIBLE
@@ -1345,6 +1339,7 @@ class MainActivity : AppCompatActivity() {
                 loadFromInput()
                 binding.editUrl.clearFocus()
                 hideKeyboard(binding.editUrl)
+                hideSuggestions()
                 true
             } else {
                 false
@@ -1366,8 +1361,23 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
                 suppressUrlFocusRevert = false
+                hideSuggestions()
             }
         }
+        binding.editUrl.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                if (!binding.editUrl.hasFocus()) return
+                val query = s?.toString()?.trim() ?: ""
+                suggestionsHandler.removeCallbacksAndMessages(null)
+                if (query.isEmpty()) {
+                    hideSuggestions()
+                    return
+                }
+                suggestionsHandler.postDelayed({ requestSuggestions(query) }, 250)
+            }
+        })
 
         // Alt bar
         binding.btnBottomBack.setOnClickListener {
@@ -1395,7 +1405,7 @@ class MainActivity : AppCompatActivity() {
             showBottomMenu(anchor)
         }
 
-        // Sayfada bul çubuğu (FindListener her WebView için configureWebView'da kuruluyor)
+        // Sayfada bul Ã§ubuÄŸu (FindListener her WebView iÃ§in configureWebView'da kuruluyor)
         binding.findInPageInput.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
@@ -1421,7 +1431,7 @@ class MainActivity : AppCompatActivity() {
         binding.btnFindNext.setOnClickListener { currentWebView().findNext(true) }
         binding.btnFindClose.setOnClickListener { closeFindInPage() }
 
-        // Açılış ekranı arama kutusu
+        // AÃ§Ä±lÄ±ÅŸ ekranÄ± arama kutusu
         binding.homeSearchBox.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_GO || actionId == EditorInfo.IME_ACTION_DONE) {
                 val input = binding.homeSearchBox.text.toString().trim()
@@ -1455,7 +1465,7 @@ class MainActivity : AppCompatActivity() {
             buildFunctionMenuCard(
                 iconRes = R.drawable.ic_block,
                 label = "Reklam Engelleme",
-                statusText = if (adBlockOn) "Açık" else "Kapalı",
+                statusText = if (adBlockOn) "AÃ§Ä±k" else "KapalÄ±",
                 isActive = adBlockOn
             ) {
                 val newState = !isAdBlockEnabled()
@@ -1463,7 +1473,7 @@ class MainActivity : AppCompatActivity() {
                 dialog.dismiss()
                 Toast.makeText(
                     this,
-                    if (newState) "Reklam engelleme açıldı" else "Reklam engelleme kapatıldı",
+                    if (newState) "Reklam engelleme aÃ§Ä±ldÄ±" else "Reklam engelleme kapatÄ±ldÄ±",
                     Toast.LENGTH_SHORT
                 ).show()
             }
@@ -1484,7 +1494,7 @@ class MainActivity : AppCompatActivity() {
         container.addView(
             buildFunctionMenuCard(
                 iconRes = R.drawable.ic_download,
-                label = "İndirilenler",
+                label = "Ä°ndirilenler",
                 statusText = null,
                 isActive = false
             ) {
@@ -1496,7 +1506,7 @@ class MainActivity : AppCompatActivity() {
         container.addView(
             buildFunctionMenuCard(
                 iconRes = R.drawable.ic_history,
-                label = "Geçmiş",
+                label = "GeÃ§miÅŸ",
                 statusText = null,
                 isActive = false
             ) {
@@ -1525,7 +1535,7 @@ class MainActivity : AppCompatActivity() {
         container2.addView(
             buildFunctionMenuCard(
                 iconRes = R.drawable.ic_share,
-                label = "Paylaş",
+                label = "PaylaÅŸ",
                 statusText = null,
                 isActive = false
             ) {
@@ -1537,8 +1547,8 @@ class MainActivity : AppCompatActivity() {
         container2.addView(
             buildFunctionMenuCard(
                 iconRes = R.drawable.ic_desktop,
-                label = "Masaüstü Sitesi",
-                statusText = if (currentTab().isDesktopMode) "Açık" else "Kapalı",
+                label = "MasaÃ¼stÃ¼ Sitesi",
+                statusText = if (currentTab().isDesktopMode) "AÃ§Ä±k" else "KapalÄ±",
                 isActive = currentTab().isDesktopMode
             ) {
                 dialog.dismiss()
@@ -1549,7 +1559,7 @@ class MainActivity : AppCompatActivity() {
         container2.addView(
             buildFunctionMenuCard(
                 iconRes = R.drawable.ic_text_size,
-                label = "Yazı Boyutu",
+                label = "YazÄ± Boyutu",
                 statusText = "%${effectiveTextZoomFor(currentHost())}",
                 isActive = false
             ) {
@@ -1561,7 +1571,7 @@ class MainActivity : AppCompatActivity() {
         container2.addView(
             buildFunctionMenuCard(
                 iconRes = R.drawable.ic_bookmark,
-                label = "Yer İmine Ekle",
+                label = "Yer Ä°mine Ekle",
                 statusText = null,
                 isActive = false
             ) {
@@ -1686,8 +1696,8 @@ class MainActivity : AppCompatActivity() {
         val title = currentWebView().title?.takeIf { it.isNotBlank() }
             ?: url.removePrefix("https://").removePrefix("http://")
 
-        // WebView'in kendi favicon'u varsa anlık önizleme olarak kullan,
-        // gerçek/güvenilir ikon için her zaman ağdan da indirmeyi dene.
+        // WebView'in kendi favicon'u varsa anlÄ±k Ã¶nizleme olarak kullan,
+        // gerÃ§ek/gÃ¼venilir ikon iÃ§in her zaman aÄŸdan da indirmeyi dene.
         val placeholderIcon = currentWebView().favicon
         bookmarks.add(BookmarkItem(title, url, placeholderIcon))
         saveBookmarksList()
@@ -1697,7 +1707,7 @@ class MainActivity : AppCompatActivity() {
         fetchFaviconAsync(url)
     }
 
-    // ---- Masaüstü sitesi modu ----
+    // ---- MasaÃ¼stÃ¼ sitesi modu ----
 
     private fun toggleDesktopMode() {
         val tab = currentTab()
@@ -1706,7 +1716,7 @@ class MainActivity : AppCompatActivity() {
         currentWebView().reload()
         Toast.makeText(
             this,
-            if (tab.isDesktopMode) "Masaüstü sitesi açıldı" else "Masaüstü sitesi kapatıldı",
+            if (tab.isDesktopMode) "MasaÃ¼stÃ¼ sitesi aÃ§Ä±ldÄ±" else "MasaÃ¼stÃ¼ sitesi kapatÄ±ldÄ±",
             Toast.LENGTH_SHORT
         ).show()
     }
@@ -1719,12 +1729,12 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ---- Paylaş ----
+    // ---- PaylaÅŸ ----
 
     private fun shareCurrentPage() {
         val url = currentWebView().url
         if (url.isNullOrBlank()) {
-            Toast.makeText(this, "Paylaşılacak bir sayfa yok", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "PaylaÅŸÄ±lacak bir sayfa yok", Toast.LENGTH_SHORT).show()
             return
         }
         val intent = Intent(Intent.ACTION_SEND).apply {
@@ -1732,7 +1742,7 @@ class MainActivity : AppCompatActivity() {
             putExtra(Intent.EXTRA_TEXT, url)
             putExtra(Intent.EXTRA_SUBJECT, currentWebView().title?.takeIf { it.isNotBlank() } ?: url)
         }
-        startActivity(Intent.createChooser(intent, "Paylaş"))
+        startActivity(Intent.createChooser(intent, "PaylaÅŸ"))
     }
 
     // ---- Sayfada bul ----
@@ -1764,7 +1774,7 @@ class MainActivity : AppCompatActivity() {
         binding.browserRoot.visibility = View.VISIBLE
     }
 
-    // ---- Sekme yönetimi ----
+    // ---- Sekme yÃ¶netimi ----
 
     private fun currentTab(): TabInfo = tabs[currentTabIndex]
 
@@ -1796,10 +1806,10 @@ class MainActivity : AppCompatActivity() {
         applyAppearanceSettings()
 
         if (isFreshTab) {
-            // Bu sekmenin WebView'i ilk kez oluşturuluyor -- ilk navigasyonu
-            // başlatmamız gerekiyor. Mevcut bir sekmeye dönülürken ise
-            // WebView'in kendi içeriği/geçmişi/scroll pozisyonu zaten olduğu
-            // gibi korunuyor, hiçbir şey yeniden yüklenmiyor.
+            // Bu sekmenin WebView'i ilk kez oluÅŸturuluyor -- ilk navigasyonu
+            // baÅŸlatmamÄ±z gerekiyor. Mevcut bir sekmeye dÃ¶nÃ¼lÃ¼rken ise
+            // WebView'in kendi iÃ§eriÄŸi/geÃ§miÅŸi/scroll pozisyonu zaten olduÄŸu
+            // gibi korunuyor, hiÃ§bir ÅŸey yeniden yÃ¼klenmiyor.
             when {
                 !tab.url.isNullOrBlank() -> {
                     webView.loadUrl(tab.url!!)
@@ -1840,20 +1850,20 @@ class MainActivity : AppCompatActivity() {
 
     private fun addNewTab() {
         saveCurrentTabState()
-        tabs.add(TabInfo(id = nextTabId++))
+        tabs.add(TabInfo(id = tabManager.nextId()))
         currentTabIndex = tabs.size - 1
         restoreCurrentTab()
     }
 
-    // window.open()/target="_blank" ile açılan popup'lar için: yeni sekme
-    // kaydını oluşturur ama henüz WebView'ini yaratmaz/yüklemez -- çağıran
-    // taraf (onCreateWindow) hedef URL'yi tab.url'e atayıp restoreCurrentTab()
-    // çağırarak gerçek (yepyeni, hiçbir şeyle paylaşılmayan) WebView'i
-    // oluşturup navigasyonu başlatıyor.
+    // window.open()/target="_blank" ile aÃ§Ä±lan popup'lar iÃ§in: yeni sekme
+    // kaydÄ±nÄ± oluÅŸturur ama henÃ¼z WebView'ini yaratmaz/yÃ¼klemez -- Ã§aÄŸÄ±ran
+    // taraf (onCreateWindow) hedef URL'yi tab.url'e atayÄ±p restoreCurrentTab()
+    // Ã§aÄŸÄ±rarak gerÃ§ek (yepyeni, hiÃ§bir ÅŸeyle paylaÅŸÄ±lmayan) WebView'i
+    // oluÅŸturup navigasyonu baÅŸlatÄ±yor.
     private fun prepareNewTabForPopup(): TabInfo {
         val openerId = currentTab().id
         saveCurrentTabState()
-        val newTab = TabInfo(id = nextTabId++, openerTabId = openerId)
+        val newTab = TabInfo(id = tabManager.nextId(), openerTabId = openerId)
         tabs.add(newTab)
         currentTabIndex = tabs.size - 1
         return newTab
@@ -1861,28 +1871,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun closeTab(index: Int, switchToIndex: Int? = null) {
         if (index !in tabs.indices) return
-
-        if (tabs.size <= 1) {
-            destroyTabWebView(tabs[index])
-            tabs[0] = TabInfo(id = nextTabId++)
-            currentTabIndex = 0
-            restoreCurrentTab()
-            return
-        }
-
         val wasCurrent = index == currentTabIndex
-        val closedTab = tabs.removeAt(index)
+        val closedTab = tabManager.closeTab(index, switchToIndex) ?: return
         destroyTabWebView(closedTab)
-
-        if (switchToIndex != null) {
-            // Belirli bir sekmeye (örn. açan/opener sekme) kesin olarak dönülüyor;
-            // index kaydırma listeden çıkarma sonrası yeniden hesaplanıyor.
-            currentTabIndex = if (switchToIndex > index) switchToIndex - 1 else switchToIndex
-        } else if (index < currentTabIndex) {
-            currentTabIndex -= 1
-        } else if (wasCurrent && currentTabIndex >= tabs.size) {
-            currentTabIndex = tabs.size - 1
-        }
 
         if (wasCurrent || switchToIndex != null) {
             restoreCurrentTab()
@@ -1898,14 +1889,13 @@ class MainActivity : AppCompatActivity() {
         tab.webView = null
     }
 
-    // Geri tuşuyla sekme kapatılırken Chrome/Safari'nin davranışı: listede
-    // sırayla önceki sekmeye değil, bu sekmeyi AÇAN (opener) sekmeye dönülür.
-    // Bu, kullanıcı araya başka sekmeler açıp/gezip sonra geri tuşuna bassa
-    // bile her zaman doğru sekmeye dönülmesini garantiliyor.
+    // Geri tuÅŸuyla sekme kapatÄ±lÄ±rken Chrome/Safari'nin davranÄ±ÅŸÄ±: listede
+    // sÄ±rayla Ã¶nceki sekmeye deÄŸil, bu sekmeyi AÃ‡AN (opener) sekmeye dÃ¶nÃ¼lÃ¼r.
+    // Bu, kullanÄ±cÄ± araya baÅŸka sekmeler aÃ§Ä±p/gezip sonra geri tuÅŸuna bassa
+    // bile her zaman doÄŸru sekmeye dÃ¶nÃ¼lmesini garantiliyor.
     private fun closeCurrentTabReturningToOpener() {
         val closingTab = currentTab()
-        val openerId = closingTab.openerTabId
-        val openerIndex = if (openerId != null) tabs.indexOfFirst { it.id == openerId } else -1
+        val openerIndex = tabManager.indexOfOpener(closingTab)
         closeTab(currentTabIndex, switchToIndex = if (openerIndex != -1) openerIndex else null)
     }
 
@@ -2055,6 +2045,69 @@ class MainActivity : AppCompatActivity() {
         currentWebView().loadUrl(resolveUrl(input))
     }
 
+    // ---- Arama Ã¶nerileri ----
+
+    private fun requestSuggestions(query: String) {
+        val engine = getSharedPreferences("via_lite_prefs", MODE_PRIVATE).getString("search_engine", "google") ?: "google"
+        searchSuggestionsProvider.fetchSuggestions(query, engine) { suggestions ->
+            // KullanÄ±cÄ± bu sÃ¼re iÃ§inde yazmayÄ± bitirip URL Ã§ubuÄŸundan
+            // ayrÄ±lmÄ±ÅŸ olabilir; eski bir sonucu geÃ§ gÃ¶sterme.
+            if (!binding.editUrl.hasFocus() || binding.editUrl.text.toString().trim() != query) return@fetchSuggestions
+            showSuggestionsList(suggestions, query)
+        }
+    }
+
+    private fun showSuggestionsList(suggestions: List<String>, query: String) {
+        if (suggestions.isEmpty()) {
+            hideSuggestions()
+            return
+        }
+        binding.suggestionsContainer.removeAllViews()
+        suggestions.forEach { suggestion ->
+            binding.suggestionsContainer.addView(buildSuggestionRow(suggestion))
+        }
+        binding.suggestionsContainer.visibility = View.VISIBLE
+    }
+
+    private fun buildSuggestionRow(suggestion: String): View {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                suppressUrlFocusRevert = true
+                binding.editUrl.setText(suggestion)
+                binding.editUrl.clearFocus()
+                hideKeyboard(binding.editUrl)
+                hideSuggestions()
+                currentWebView().loadUrl(resolveUrl(suggestion))
+            }
+        }
+        val icon = ImageView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(18), dp(18)).apply { marginEnd = dp(12) }
+            setImageResource(R.drawable.ic_search)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+        }
+        val label = TextView(this).apply {
+            text = suggestion
+            textSize = 15f
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+            setTextColor(0xFF1A1A1A.toInt())
+        }
+        row.addView(icon)
+        row.addView(label)
+        return row
+    }
+
+    private fun hideSuggestions() {
+        suggestionsHandler.removeCallbacksAndMessages(null)
+        binding.suggestionsContainer.visibility = View.GONE
+        binding.suggestionsContainer.removeAllViews()
+    }
+
     private fun hideKeyboard(view: View) {
         val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
         imm.hideSoftInputFromWindow(view.windowToken, 0)
@@ -2091,7 +2144,7 @@ class MainActivity : AppCompatActivity() {
         getSharedPreferences("via_lite_prefs", MODE_PRIVATE).edit().putString("bookmarks", raw).apply()
     }
 
-    // ---- Favicon önbellekleme ----
+    // ---- Favicon Ã¶nbellekleme ----
 
     private fun faviconKey(url: String): String = "favicon::$url"
 
@@ -2113,7 +2166,7 @@ class MainActivity : AppCompatActivity() {
             val base64 = Base64.encodeToString(stream.toByteArray(), Base64.DEFAULT)
             getSharedPreferences("via_lite_prefs", MODE_PRIVATE).edit().putString(faviconKey(url), base64).apply()
         } catch (e: Exception) {
-            // önbellekleme başarısız olursa sessizce yoksay
+            // Ã¶nbellekleme baÅŸarÄ±sÄ±z olursa sessizce yoksay
         }
     }
 
@@ -2121,15 +2174,15 @@ class MainActivity : AppCompatActivity() {
 
     private fun fetchFaviconAsync(url: String) {
         Thread {
-            // 1) Önce sitenin kendi HTML'sindeki apple-touch-icon / manifest ikonunu dene
-            // (Opera/Chrome'un yaptığı gibi) — bunlar boşluksuz, yüksek çözünürlüklüdür.
+            // 1) Ã–nce sitenin kendi HTML'sindeki apple-touch-icon / manifest ikonunu dene
+            // (Opera/Chrome'un yaptÄ±ÄŸÄ± gibi) â€” bunlar boÅŸluksuz, yÃ¼ksek Ã§Ã¶zÃ¼nÃ¼rlÃ¼klÃ¼dÃ¼r.
             var bitmap: Bitmap? = null
             val pageIconUrl = findBestIconUrlFromPage(url)
             if (pageIconUrl != null) {
                 bitmap = downloadBitmap(pageIconUrl)
             }
 
-            // 2) Bulunamazsa veya çok küçükse eski favicon servislerine düş.
+            // 2) Bulunamazsa veya Ã§ok kÃ¼Ã§Ã¼kse eski favicon servislerine dÃ¼ÅŸ.
             if (bitmap == null || bitmap.width < 48 || bitmap.height < 48) {
                 val host = Uri.parse(url).host
                 if (host != null) {
@@ -2159,7 +2212,7 @@ class MainActivity : AppCompatActivity() {
         }.start()
     }
 
-    // ---- Sayfanın kendi HTML'sinden yüksek çözünürlüklü ikon bulma ----
+    // ---- SayfanÄ±n kendi HTML'sinden yÃ¼ksek Ã§Ã¶zÃ¼nÃ¼rlÃ¼klÃ¼ ikon bulma ----
 
     private fun findBestIconUrlFromPage(pageUrl: String): String? {
         val html = fetchHtmlSnippet(pageUrl) ?: return null
@@ -2378,8 +2431,8 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // ScrollView içinde standart uzun-basma algılayıcısı en ufak kaydırma
-        // titremesinde iptal olabiliyor; bu yüzden kendi toleranslı algılayıcımızı kuruyoruz.
+        // ScrollView iÃ§inde standart uzun-basma algÄ±layÄ±cÄ±sÄ± en ufak kaydÄ±rma
+        // titremesinde iptal olabiliyor; bu yÃ¼zden kendi toleranslÄ± algÄ±layÄ±cÄ±mÄ±zÄ± kuruyoruz.
         if (!isAddTile && url != null) {
             container.tag = url
 
@@ -2466,7 +2519,7 @@ class MainActivity : AppCompatActivity() {
         return container
     }
 
-    // ---- Yer imi sürükle-bırak (sıralama ve silme) ----
+    // ---- Yer imi sÃ¼rÃ¼kle-bÄ±rak (sÄ±ralama ve silme) ----
 
     private fun startBookmarkDrag(view: View, url: String) {
         val item = ClipData.Item(url)
@@ -2492,7 +2545,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showBookmarkOptionsPopup(title: String, url: String) {
-        val options = arrayOf("Sil", "Düzenle", "Yeni Sekmede Aç")
+        val options = arrayOf("Sil", "DÃ¼zenle", "Yeni Sekmede AÃ§")
         AlertDialog.Builder(this)
             .setTitle(title)
             .setItems(options) { _, which ->
@@ -2524,7 +2577,7 @@ class MainActivity : AppCompatActivity() {
             setPadding(dp(24), dp(16), dp(24), 0)
         }
         val titleInput = EditText(this).apply {
-            hint = "Başlık"
+            hint = "BaÅŸlÄ±k"
             setText(bookmark.title)
         }
         val urlInput = EditText(this).apply {
@@ -2536,7 +2589,7 @@ class MainActivity : AppCompatActivity() {
         container.addView(urlInput)
 
         AlertDialog.Builder(this)
-            .setTitle("Yer İmini Düzenle")
+            .setTitle("Yer Ä°mini DÃ¼zenle")
             .setView(container)
             .setPositiveButton("Kaydet") { _, _ ->
                 var newUrl = urlInput.text.toString().trim()
@@ -2567,7 +2620,7 @@ class MainActivity : AppCompatActivity() {
                 saveBookmarksList()
                 refreshBookmarksGrid()
             }
-            .setNegativeButton("Vazgeç", null)
+            .setNegativeButton("VazgeÃ§", null)
             .show()
     }
 
@@ -2576,7 +2629,7 @@ class MainActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(24), dp(16), dp(24), 0)
         }
-        val titleInput = EditText(this).apply { hint = "Başlık" }
+        val titleInput = EditText(this).apply { hint = "BaÅŸlÄ±k" }
         val urlInput = EditText(this).apply {
             hint = "URL"
             inputType = InputType.TYPE_TEXT_VARIATION_URI
@@ -2585,7 +2638,7 @@ class MainActivity : AppCompatActivity() {
         container.addView(urlInput)
 
         AlertDialog.Builder(this)
-            .setTitle("Yer İmi Ekle")
+            .setTitle("Yer Ä°mi Ekle")
             .setView(container)
             .setPositiveButton("Ekle") { _, _ ->
                 var url = urlInput.text.toString().trim()
@@ -2602,14 +2655,14 @@ class MainActivity : AppCompatActivity() {
                 refreshBookmarksGrid()
                 fetchFaviconAsync(url)
             }
-            .setNegativeButton("Vazgeç", null)
+            .setNegativeButton("VazgeÃ§", null)
             .show()
     }
 
-    // Geri tuşu: önce sekme içi geçmiş, yoksa (ve birden fazla sekme açıksa)
-    // bu sekmeyi kapatıp önceki sekmeye dön -- özellikle target="_blank" ile
-    // açılan yeni sekmelerde geçmiş olmadığından bu davranış olmazsa geri
-    // tuşu uygulamayı kapatmaya çalışırdı.
+    // Geri tuÅŸu: Ã¶nce sekme iÃ§i geÃ§miÅŸ, yoksa (ve birden fazla sekme aÃ§Ä±ksa)
+    // bu sekmeyi kapatÄ±p Ã¶nceki sekmeye dÃ¶n -- Ã¶zellikle target="_blank" ile
+    // aÃ§Ä±lan yeni sekmelerde geÃ§miÅŸ olmadÄ±ÄŸÄ±ndan bu davranÄ±ÅŸ olmazsa geri
+    // tuÅŸu uygulamayÄ± kapatmaya Ã§alÄ±ÅŸÄ±rdÄ±.
     private fun handleBackNavigation(): Boolean {
         if (currentWebView().canGoBack()) {
             showBrowser()
