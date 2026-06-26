@@ -1592,7 +1592,7 @@ class MainActivity : AppCompatActivity() {
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 1f
             ).apply { marginStart = dp(12) }
-            text = "Yeni Sekme"
+            text = "Yeni Sekme Aç"
             textSize = 15f
             setTextColor(0xFF1A1A1A.toInt())
         }
