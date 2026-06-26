@@ -1547,9 +1547,14 @@ class MainActivity : AppCompatActivity() {
 
         // En son açılan sekme listede en üstte görünsün; ama gerçek index
         // (switchToTab/closeTab için) değişmiyor, sadece görüntüleme sırası.
-        tabs.withIndex().toList().asReversed().forEach { (index, tab) ->
-            container.addView(buildTabRow(tab, index, dialog))
-        }
+        // Sadece gerçek bir sayfa açık olan sekmeler listelenir; ana ekranı
+        // (yer imleri) gösteren boş sekmeler listede hiç görünmez.
+        tabs.withIndex()
+            .filter { (_, tab) -> !tab.url.isNullOrBlank() }
+            .reversed()
+            .forEach { (index, tab) ->
+                container.addView(buildTabRow(tab, index, dialog))
+            }
         container.addView(buildAddTabRow(dialog))
         container.addView(buildAddPrivateTabRow(dialog))
 
