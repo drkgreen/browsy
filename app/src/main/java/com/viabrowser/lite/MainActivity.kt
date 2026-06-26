@@ -1162,7 +1162,7 @@ class MainActivity : AppCompatActivity() {
                 // yakalamak için tek seferlik, görünmez bir "yakalayıcı" WebView
                 // kullanıyoruz; gerçek içerik normal sekme akışımızla açılıyor.
                 var handled = false
-                val catcherWebView = WebView(this)
+                val catcherWebView = WebView(this@MainActivity)
                 catcherWebView.settings.javaScriptEnabled = true
                 catcherWebView.webViewClient = object : WebViewClient() {
                     override fun onPageStarted(v: WebView, url: String?, favicon: Bitmap?) {
