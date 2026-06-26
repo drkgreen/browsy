@@ -31,6 +31,7 @@ import android.view.Gravity
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.webkit.CookieManager
@@ -46,6 +47,7 @@ import android.webkit.WebStorage
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.GridLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -73,9 +75,9 @@ data class TabInfo(
     var title: String = "Yeni Sekme",
     var url: String? = null,
     var favicon: Bitmap? = null,
-    var webViewState: Bundle? = null,
     var isDesktopMode: Boolean = false,
-    var openerTabId: Long? = null
+    var openerTabId: Long? = null,
+    var webView: NestedScrollWebView? = null
 )
 
 data class SitePermission(val host: String, val type: String, var decision: String)
@@ -269,12 +271,27 @@ class MainActivity : AppCompatActivity() {
         consumePendingAppearanceReload()
     }
 
+    override fun onDestroy() {
+        // Artık her sekme kendi WebView'ine sahip olduğundan, Activity
+        // kapanırken hepsini açıkça yok etmemiz gerekiyor -- aksi halde
+        // her biri native kaynaklarını (render süreci bağlantısı vb.)
+        // tutmaya devam edip bellek sızıntısına yol açabilir.
+        tabs.forEach { tab ->
+            tab.webView?.let {
+                (it.parent as? ViewGroup)?.removeView(it)
+                it.destroy()
+            }
+        }
+        super.onDestroy()
+    }
+
     private fun consumePendingAppearanceReload() {
         val prefs = getSharedPreferences("via_lite_prefs", MODE_PRIVATE)
         if (prefs.getBoolean("pending_appearance_reload", false)) {
             prefs.edit().putBoolean("pending_appearance_reload", false).apply()
-            if (!binding.webView.url.isNullOrBlank() && binding.webView.url != "about:blank") {
-                binding.webView.reload()
+            val webView = currentWebView()
+            if (!webView.url.isNullOrBlank() && webView.url != "about:blank") {
+                webView.reload()
             }
         }
     }
@@ -282,8 +299,12 @@ class MainActivity : AppCompatActivity() {
     private fun consumePendingCacheClear() {
         val prefs = getSharedPreferences("via_lite_prefs", MODE_PRIVATE)
         if (prefs.getBoolean("pending_clear_cache", false)) {
-            binding.webView.clearCache(true)
-            binding.webView.clearHistory()
+            tabs.forEach { tab ->
+                tab.webView?.let {
+                    it.clearCache(true)
+                    it.clearHistory()
+                }
+            }
             prefs.edit().putBoolean("pending_clear_cache", false).apply()
         }
     }
@@ -291,7 +312,9 @@ class MainActivity : AppCompatActivity() {
     private fun applyCookieSettings() {
         val blockThirdParty = getSharedPreferences("via_lite_prefs", MODE_PRIVATE)
             .getBoolean("block_third_party_cookies", false)
-        CookieManager.getInstance().setAcceptThirdPartyCookies(binding.webView, !blockThirdParty)
+        tabs.forEach { tab ->
+            tab.webView?.let { CookieManager.getInstance().setAcceptThirdPartyCookies(it, !blockThirdParty) }
+        }
     }
 
     // ---- Dosya indirme ----
@@ -545,7 +568,7 @@ class MainActivity : AppCompatActivity() {
                 setVal(find(['textarea[name*="address" i]','input[autocomplete="street-address"]','input[name*="address" i]','input[id*="address" i]']), data.address);
             })($json);
         """.trimIndent()
-        binding.webView.evaluateJavascript(js, null)
+        currentWebView().evaluateJavascript(js, null)
         Toast.makeText(this, "Adres dolduruldu", Toast.LENGTH_SHORT).show()
     }
 
@@ -653,7 +676,7 @@ class MainActivity : AppCompatActivity() {
             setOnClickListener {
                 dialog.dismiss()
                 showBrowser()
-                binding.webView.loadUrl(entry.url)
+                currentWebView().loadUrl(entry.url)
             }
         }
         row.addView(
@@ -819,7 +842,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun applyAppearanceSettings() {
-        binding.webView.settings.textZoom = effectiveTextZoomFor(currentHost())
+        currentWebView().settings.textZoom = effectiveTextZoomFor(currentHost())
         // Web sayfalarının karartılması artık CSS injection ile yapılıyor
         // (bkz. applyForceDarkIfNeeded), uygulamanın kendi teması bundan etkilenmiyor.
     }
@@ -854,7 +877,7 @@ class MainActivity : AppCompatActivity() {
 
     // ---- Site-özel yazı boyutu ----
 
-    private fun currentHost(): String? = binding.webView.url?.let { Uri.parse(it).host }
+    private fun currentHost(): String? = currentWebView().url?.let { Uri.parse(it).host }
 
     private fun effectiveTextZoomFor(host: String?): Int {
         val prefs = getSharedPreferences("via_lite_prefs", MODE_PRIVATE)
@@ -957,15 +980,40 @@ class MainActivity : AppCompatActivity() {
             .setPositiveButton("Kaydet") { _, _ ->
                 val zoom = seekBar.progress + 50
                 setSiteTextZoom(host, zoom)
-                binding.webView.settings.textZoom = zoom
+                currentWebView().settings.textZoom = zoom
             }
             .setNegativeButton("Vazgeç", null)
             .show()
     }
 
-    private fun setupWebView() {
-        val webView = binding.webView
+    private fun currentWebView(): NestedScrollWebView {
+        val tab = currentTab()
+        return tab.webView ?: createWebViewForTab(tab)
+    }
 
+    private fun createWebViewForTab(tab: TabInfo): NestedScrollWebView {
+        val webView = NestedScrollWebView(this)
+        webView.layoutParams = FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT
+        )
+        configureWebView(webView)
+        tab.webView = webView
+        return webView
+    }
+
+    // Konteynerdeki o anki sekmenin WebView'ini gösterip eski sekmenin
+    // WebView'ini ayırıyor (yok etmiyor -- bellekte saklı kalıyor, sekmeler
+    // arası gezinti, scroll pozisyonu ve geçmiş kaybolmuyor).
+    private fun activateCurrentTabWebView(): NestedScrollWebView {
+        val webView = currentWebView()
+        binding.webViewContainer.removeAllViews()
+        (webView.parent as? ViewGroup)?.removeView(webView)
+        binding.webViewContainer.addView(webView)
+        return webView
+    }
+
+    private fun configureWebView(webView: NestedScrollWebView) {
         webView.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
@@ -978,13 +1026,27 @@ class MainActivity : AppCompatActivity() {
             setSupportMultipleWindows(true)
             javaScriptCanOpenWindowsAutomatically = true
         }
-        defaultUserAgent = webView.settings.userAgentString
+        if (defaultUserAgent == null) {
+            defaultUserAgent = webView.settings.userAgentString
+        }
 
-        applyAppearanceSettings()
-        applyCookieSettings()
+        val blockThirdParty = getSharedPreferences("via_lite_prefs", MODE_PRIVATE)
+            .getBoolean("block_third_party_cookies", false)
+        CookieManager.getInstance().setAcceptThirdPartyCookies(webView, !blockThirdParty)
 
         webView.setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
             startFileDownload(url, userAgent, contentDisposition, mimeType)
+        }
+
+        webView.setFindListener { activeMatchOrdinal, numberOfMatches, isDoneCounting ->
+            if (webView !== currentTab().webView) return@setFindListener
+            if (isDoneCounting) {
+                binding.findInPageCount.text = if (numberOfMatches == 0) {
+                    "0/0"
+                } else {
+                    "${activeMatchOrdinal + 1}/$numberOfMatches"
+                }
+            }
         }
 
         webView.webViewClient = object : WebViewClient() {
@@ -1029,13 +1091,6 @@ class MainActivity : AppCompatActivity() {
                 // kullanıcı önce varsayılan boyutla render edilen sayfayı
                 // görüp sonra site-özel boyuta "zıpladığını" fark ediyor.
                 view.settings.textZoom = effectiveTextZoomFor(Uri.parse(url).host)
-                // Sekme değişiminde geçmişi temizleme: bazı URL'lerde (örn. # içeren)
-                // onPageStarted tetiklenmeyebiliyor, bu yüzden hem burada hem
-                // onPageFinished'da kontrol ediyoruz (Cordova'nın kullandığı desen).
-                if (pendingClearHistory) {
-                    view.clearHistory()
-                    pendingClearHistory = false
-                }
             }
 
             override fun shouldInterceptRequest(
@@ -1057,10 +1112,6 @@ class MainActivity : AppCompatActivity() {
 
             override fun onPageFinished(view: WebView, url: String) {
                 super.onPageFinished(view, url)
-                if (pendingClearHistory) {
-                    view.clearHistory()
-                    pendingClearHistory = false
-                }
                 currentTab().url = url
                 view.settings.textZoom = effectiveTextZoomFor(Uri.parse(url).host)
                 if (!binding.editUrl.hasFocus()) {
@@ -1085,6 +1136,7 @@ class MainActivity : AppCompatActivity() {
         webView.webChromeClient = object : WebChromeClient() {
             override fun onProgressChanged(view: WebView, newProgress: Int) {
                 super.onProgressChanged(view, newProgress)
+                if (view !== currentTab().webView) return
                 binding.progressBar.progress = newProgress
                 binding.progressBar.visibility =
                     if (newProgress in 1..99) View.VISIBLE else View.GONE
@@ -1092,7 +1144,8 @@ class MainActivity : AppCompatActivity() {
 
             override fun onReceivedIcon(view: WebView, icon: Bitmap) {
                 super.onReceivedIcon(view, icon)
-                currentTab().favicon = icon
+                val tab = tabs.find { it.webView === view } ?: return
+                tab.favicon = icon
                 val url = view.url
                 if (url != null) {
                     val item = bookmarks.find { it.url == url }
@@ -1106,10 +1159,11 @@ class MainActivity : AppCompatActivity() {
 
             override fun onReceivedTitle(view: WebView, title: String) {
                 super.onReceivedTitle(view, title)
+                val tab = tabs.find { it.webView === view } ?: return
                 if (title.isNotBlank()) {
-                    currentTab().title = title
+                    tab.title = title
                 }
-                if (!binding.editUrl.hasFocus() && title.isNotBlank()) {
+                if (view === currentTab().webView && !binding.editUrl.hasFocus() && title.isNotBlank()) {
                     binding.editUrl.setText(title)
                 }
             }
@@ -1169,10 +1223,10 @@ class MainActivity : AppCompatActivity() {
                 // Chromium'un resmi dokümantasyonu: onCreateWindow için mevcut bir
                 // WebView'i yeniden kullanmak desteklenmiyor ("it is better to not
                 // reuse an existing WebView") -- denenirse sessizce (hatasız) başarısız
-                // oluyor ve render sürecini çökertebiliyor. Paylaşılan tek WebView
-                // mimarimiz olduğundan, popup'ın gerçekte gitmek istediği URL'yi
-                // yakalamak için tek seferlik, görünmez bir "yakalayıcı" WebView
-                // kullanıyoruz; gerçek içerik normal sekme akışımızla açılıyor.
+                // oluyor ve render sürecini çökertebiliyor. Bu yüzden popup'ın gerçekte
+                // gitmek istediği URL'yi yakalamak için tek seferlik, görünmez bir
+                // "yakalayıcı" WebView kullanıyoruz; gerçek içerik tamamen YENİ bir
+                // sekmenin kendi (yeni oluşturulan) WebView'inde açılıyor.
                 var handled = false
                 val catcherWebView = WebView(this@MainActivity)
                 catcherWebView.settings.javaScriptEnabled = true
@@ -1180,9 +1234,9 @@ class MainActivity : AppCompatActivity() {
                     override fun onPageStarted(v: WebView, url: String?, favicon: Bitmap?) {
                         if (handled || url == null || url == "about:blank") return
                         handled = true
-                        prepareNewTabForPopup()
-                        pendingClearHistory = true
-                        binding.webView.loadUrl(url)
+                        val newTab = prepareNewTabForPopup()
+                        newTab.url = url
+                        restoreCurrentTab()
                         v.stopLoading()
                         v.post { v.destroy() }
                     }
@@ -1199,9 +1253,11 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.swipeRefresh.setOnRefreshListener {
-            binding.webView.reload()
+            currentWebView().reload()
         }
+    }
 
+    private fun setupWebView() {
         // AppBarLayout üst barı native olarak (gerçek dokunma fiziğiyle senkronize)
         // kaydırınca gizleyip gösteriyor. Alt barı da aynı orana göre kaydırarak
         // ikisini birlikte hareket ettiriyoruz.
@@ -1231,7 +1287,7 @@ class MainActivity : AppCompatActivity() {
             "if(bg && bg!=='rgba(0, 0, 0, 0)' && bg!=='transparent')return bg;" +
             "return '';" +
             "})();"
-        binding.webView.evaluateJavascript(js) { result ->
+        currentWebView().evaluateJavascript(js) { result ->
             val raw = result?.trim('"')?.takeIf { it.isNotBlank() && it != "null" }
             val color = raw?.let { parseCssColor(it) } ?: Color.WHITE
             binding.topToolbar.setBackgroundColor(color)
@@ -1259,7 +1315,6 @@ class MainActivity : AppCompatActivity() {
     // sırasında taşma/boşluk riski olmuyor hem de yazarken ekstra alan açılıyor.
 
     private var maxObservedRootHeight = 0
-    private var pendingClearHistory = false
 
     private fun setupKeyboardAvoidance() {
         val rootView = binding.root
@@ -1294,14 +1349,14 @@ class MainActivity : AppCompatActivity() {
         binding.editUrl.setOnFocusChangeListener { _, hasFocus ->
             if (hasFocus) {
                 suppressUrlFocusRevert = false
-                val currentUrl = binding.webView.url
+                val currentUrl = currentWebView().url
                 if (!currentUrl.isNullOrBlank()) {
                     binding.editUrl.setText(currentUrl)
                 }
                 binding.editUrl.post { binding.editUrl.selectAll() }
             } else {
                 if (!suppressUrlFocusRevert) {
-                    val title = binding.webView.title
+                    val title = currentWebView().title
                     if (!title.isNullOrBlank()) {
                         binding.editUrl.setText(title)
                     }
@@ -1315,16 +1370,16 @@ class MainActivity : AppCompatActivity() {
             handleBackNavigation()
         }
         binding.btnBottomForward.setOnClickListener {
-            if (binding.webView.canGoForward()) {
+            if (currentWebView().canGoForward()) {
                 showBrowser()
-                binding.webView.goForward()
+                currentWebView().goForward()
             }
         }
         binding.btnHome.setOnClickListener {
             val customUrl = getCustomStartUrlIfEnabled()
             if (!customUrl.isNullOrBlank()) {
                 showBrowser()
-                binding.webView.loadUrl(customUrl)
+                currentWebView().loadUrl(customUrl)
             } else {
                 showHomeScreen()
             }
@@ -1336,39 +1391,30 @@ class MainActivity : AppCompatActivity() {
             showBottomMenu(anchor)
         }
 
-        // Sayfada bul çubuğu
-        binding.webView.setFindListener { activeMatchOrdinal, numberOfMatches, isDoneCounting ->
-            if (isDoneCounting) {
-                binding.findInPageCount.text = if (numberOfMatches == 0) {
-                    "0/0"
-                } else {
-                    "${activeMatchOrdinal + 1}/$numberOfMatches"
-                }
-            }
-        }
+        // Sayfada bul çubuğu (FindListener her WebView için configureWebView'da kuruluyor)
         binding.findInPageInput.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
             override fun afterTextChanged(s: Editable?) {
                 val query = s?.toString() ?: ""
                 if (query.isEmpty()) {
-                    binding.webView.clearMatches()
+                    currentWebView().clearMatches()
                     binding.findInPageCount.text = ""
                 } else {
-                    binding.webView.findAllAsync(query)
+                    currentWebView().findAllAsync(query)
                 }
             }
         })
         binding.findInPageInput.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_NEXT) {
-                binding.webView.findNext(true)
+                currentWebView().findNext(true)
                 true
             } else {
                 false
             }
         }
-        binding.btnFindPrev.setOnClickListener { binding.webView.findNext(false) }
-        binding.btnFindNext.setOnClickListener { binding.webView.findNext(true) }
+        binding.btnFindPrev.setOnClickListener { currentWebView().findNext(false) }
+        binding.btnFindNext.setOnClickListener { currentWebView().findNext(true) }
         binding.btnFindClose.setOnClickListener { closeFindInPage() }
 
         // Açılış ekranı arama kutusu
@@ -1378,7 +1424,7 @@ class MainActivity : AppCompatActivity() {
                 if (input.isNotEmpty()) {
                     val url = resolveUrl(input)
                     showBrowser()
-                    binding.webView.loadUrl(url)
+                    currentWebView().loadUrl(url)
                 }
                 binding.homeSearchBox.clearFocus()
                 hideKeyboard(binding.homeSearchBox)
@@ -1628,17 +1674,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun addCurrentPageToHome() {
-        val url = binding.webView.url
+        val url = currentWebView().url
         if (url.isNullOrBlank()) {
             Toast.makeText(this, "Eklenecek bir sayfa yok", Toast.LENGTH_SHORT).show()
             return
         }
-        val title = binding.webView.title?.takeIf { it.isNotBlank() }
+        val title = currentWebView().title?.takeIf { it.isNotBlank() }
             ?: url.removePrefix("https://").removePrefix("http://")
 
         // WebView'in kendi favicon'u varsa anlık önizleme olarak kullan,
         // gerçek/güvenilir ikon için her zaman ağdan da indirmeyi dene.
-        val placeholderIcon = binding.webView.favicon
+        val placeholderIcon = currentWebView().favicon
         bookmarks.add(BookmarkItem(title, url, placeholderIcon))
         saveBookmarksList()
         refreshBookmarksGrid()
@@ -1653,7 +1699,7 @@ class MainActivity : AppCompatActivity() {
         val tab = currentTab()
         tab.isDesktopMode = !tab.isDesktopMode
         applyDesktopModeSetting(tab.isDesktopMode)
-        binding.webView.reload()
+        currentWebView().reload()
         Toast.makeText(
             this,
             if (tab.isDesktopMode) "Masaüstü sitesi açıldı" else "Masaüstü sitesi kapatıldı",
@@ -1662,7 +1708,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun applyDesktopModeSetting(enabled: Boolean) {
-        binding.webView.settings.apply {
+        currentWebView().settings.apply {
             userAgentString = if (enabled) DESKTOP_USER_AGENT else defaultUserAgent
             useWideViewPort = true
             loadWithOverviewMode = true
@@ -1672,7 +1718,7 @@ class MainActivity : AppCompatActivity() {
     // ---- Paylaş ----
 
     private fun shareCurrentPage() {
-        val url = binding.webView.url
+        val url = currentWebView().url
         if (url.isNullOrBlank()) {
             Toast.makeText(this, "Paylaşılacak bir sayfa yok", Toast.LENGTH_SHORT).show()
             return
@@ -1680,7 +1726,7 @@ class MainActivity : AppCompatActivity() {
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
             putExtra(Intent.EXTRA_TEXT, url)
-            putExtra(Intent.EXTRA_SUBJECT, binding.webView.title?.takeIf { it.isNotBlank() } ?: url)
+            putExtra(Intent.EXTRA_SUBJECT, currentWebView().title?.takeIf { it.isNotBlank() } ?: url)
         }
         startActivity(Intent.createChooser(intent, "Paylaş"))
     }
@@ -1698,7 +1744,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun closeFindInPage() {
-        binding.webView.clearMatches()
+        currentWebView().clearMatches()
         binding.findInPageBar.visibility = View.GONE
         hideKeyboard(binding.findInPageInput)
     }
@@ -1730,11 +1776,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun saveCurrentTabState() {
         val tab = currentTab()
-        val bundle = Bundle()
-        binding.webView.saveState(bundle)
-        tab.webViewState = bundle
-        tab.url = binding.webView.url
-        val title = binding.webView.title
+        val webView = tab.webView ?: return
+        tab.url = webView.url
+        val title = webView.title
         if (!title.isNullOrBlank()) {
             tab.title = title
         }
@@ -1742,37 +1786,39 @@ class MainActivity : AppCompatActivity() {
 
     private fun restoreCurrentTab() {
         val tab = currentTab()
+        val isFreshTab = tab.webView == null
+        val webView = activateCurrentTabWebView()
         applyDesktopModeSetting(tab.isDesktopMode)
-        val state = tab.webViewState
-        when {
-            state != null -> {
-                binding.webView.restoreState(state)
-                showBrowser()
-            }
-            !tab.url.isNullOrBlank() -> {
-                // loadUrl, restoreState gibi geçmişi tamamen değiştirmiyor;
-                // önceki sekmenin back-stack'i paylaşılan WebView'de kalır.
-                // pendingClearHistory bunu onPageStarted/onPageFinished'da
-                // temizleyip bu sekmeyi gerçekten "yeni" bir gezinme noktası
-                // yapıyor (clearHistory'yi loadUrl'den hemen sonra çağırmak
-                // timing sorunları nedeniyle güvenilir değil).
-                pendingClearHistory = true
-                binding.webView.loadUrl(tab.url!!)
-                showBrowser()
-            }
-            else -> {
-                val customUrl = getCustomStartUrlIfEnabled()
-                if (!customUrl.isNullOrBlank()) {
-                    pendingClearHistory = true
-                    binding.webView.loadUrl(customUrl)
+        applyAppearanceSettings()
+
+        if (isFreshTab) {
+            // Bu sekmenin WebView'i ilk kez oluşturuluyor -- ilk navigasyonu
+            // başlatmamız gerekiyor. Mevcut bir sekmeye dönülürken ise
+            // WebView'in kendi içeriği/geçmişi/scroll pozisyonu zaten olduğu
+            // gibi korunuyor, hiçbir şey yeniden yüklenmiyor.
+            when {
+                !tab.url.isNullOrBlank() -> {
+                    webView.loadUrl(tab.url!!)
                     showBrowser()
-                } else {
-                    pendingClearHistory = true
-                    binding.webView.loadUrl("about:blank")
-                    showHomeScreen()
+                }
+                else -> {
+                    val customUrl = getCustomStartUrlIfEnabled()
+                    if (!customUrl.isNullOrBlank()) {
+                        webView.loadUrl(customUrl)
+                        showBrowser()
+                    } else {
+                        showHomeScreen()
+                    }
                 }
             }
+        } else {
+            if (tab.url.isNullOrBlank()) {
+                showHomeScreen()
+            } else {
+                showBrowser()
+            }
         }
+
         if (tab.url != null) {
             binding.editUrl.setText(tab.title.takeIf { it.isNotBlank() } ?: tab.url)
         } else {
@@ -1796,25 +1842,24 @@ class MainActivity : AppCompatActivity() {
     }
 
     // window.open()/target="_blank" ile açılan popup'lar için: yeni sekme
-    // kaydını oluşturur ama paylaşılan WebView'e loadUrl/restoreState ile
-    // dokunmaz -- WebView.WebViewTransport zaten kendi navigasyonunu
-    // başlatacağı için, aynı anda ikinci bir navigasyon komutu vermek
-    // (örn. addNewTab()'ın about:blank yüklemesi) Chromium'un render
-    // sürecini çökertip uygulamayı kapatabiliyor.
-    private fun prepareNewTabForPopup() {
+    // kaydını oluşturur ama henüz WebView'ini yaratmaz/yüklemez -- çağıran
+    // taraf (onCreateWindow) hedef URL'yi tab.url'e atayıp restoreCurrentTab()
+    // çağırarak gerçek (yepyeni, hiçbir şeyle paylaşılmayan) WebView'i
+    // oluşturup navigasyonu başlatıyor.
+    private fun prepareNewTabForPopup(): TabInfo {
         val openerId = currentTab().id
         saveCurrentTabState()
-        tabs.add(TabInfo(id = nextTabId++, openerTabId = openerId))
+        val newTab = TabInfo(id = nextTabId++, openerTabId = openerId)
+        tabs.add(newTab)
         currentTabIndex = tabs.size - 1
-        applyDesktopModeSetting(currentTab().isDesktopMode)
-        showBrowser()
-        updateTabCountBadge()
+        return newTab
     }
 
     private fun closeTab(index: Int, switchToIndex: Int? = null) {
         if (index !in tabs.indices) return
 
         if (tabs.size <= 1) {
+            destroyTabWebView(tabs[index])
             tabs[0] = TabInfo(id = nextTabId++)
             currentTabIndex = 0
             restoreCurrentTab()
@@ -1822,7 +1867,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         val wasCurrent = index == currentTabIndex
-        tabs.removeAt(index)
+        val closedTab = tabs.removeAt(index)
+        destroyTabWebView(closedTab)
 
         if (switchToIndex != null) {
             // Belirli bir sekmeye (örn. açan/opener sekme) kesin olarak dönülüyor;
@@ -1839,6 +1885,13 @@ class MainActivity : AppCompatActivity() {
         } else {
             updateTabCountBadge()
         }
+    }
+
+    private fun destroyTabWebView(tab: TabInfo) {
+        val webView = tab.webView ?: return
+        (webView.parent as? ViewGroup)?.removeView(webView)
+        webView.destroy()
+        tab.webView = null
     }
 
     // Geri tuşuyla sekme kapatılırken Chrome/Safari'nin davranışı: listede
@@ -1995,7 +2048,7 @@ class MainActivity : AppCompatActivity() {
     private fun loadFromInput() {
         val input = binding.editUrl.text.toString().trim()
         if (input.isEmpty()) return
-        binding.webView.loadUrl(resolveUrl(input))
+        currentWebView().loadUrl(resolveUrl(input))
     }
 
     private fun hideKeyboard(view: View) {
@@ -2317,7 +2370,7 @@ class MainActivity : AppCompatActivity() {
             } else if (url != null) {
                 showBrowser()
                 binding.editUrl.setText(url)
-                binding.webView.loadUrl(url)
+                currentWebView().loadUrl(url)
             }
         }
 
@@ -2451,7 +2504,7 @@ class MainActivity : AppCompatActivity() {
                     2 -> {
                         addNewTab()
                         showBrowser()
-                        binding.webView.loadUrl(url)
+                        currentWebView().loadUrl(url)
                     }
                 }
             }
@@ -2538,42 +2591,4 @@ class MainActivity : AppCompatActivity() {
                     url = "https://$url"
                 }
                 if (title.isEmpty()) {
-                    title = url.removePrefix("https://").removePrefix("http://")
-                }
-                bookmarks.add(BookmarkItem(title, url, null))
-                saveBookmarksList()
-                refreshBookmarksGrid()
-                fetchFaviconAsync(url)
-            }
-            .setNegativeButton("Vazgeç", null)
-            .show()
-    }
-
-    // Geri tuşu: önce sekme içi geçmiş, yoksa (ve birden fazla sekme açıksa)
-    // bu sekmeyi kapatıp önceki sekmeye dön -- özellikle target="_blank" ile
-    // açılan yeni sekmelerde geçmiş olmadığından bu davranış olmazsa geri
-    // tuşu uygulamayı kapatmaya çalışırdı.
-    private fun handleBackNavigation(): Boolean {
-        if (binding.webView.canGoBack()) {
-            showBrowser()
-            binding.webView.goBack()
-            return true
-        }
-        if (tabs.size > 1) {
-            closeCurrentTabReturningToOpener()
-            return true
-        }
-        return false
-    }
-
-    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        if (keyCode == KeyEvent.KEYCODE_BACK &&
-            binding.browserRoot.visibility == View.VISIBLE
-        ) {
-            if (handleBackNavigation()) {
-                return true
-            }
-        }
-        return super.onKeyDown(keyCode, event)
-    }
-}
+                    title = url.removePrefix("https://").removePrefix("
