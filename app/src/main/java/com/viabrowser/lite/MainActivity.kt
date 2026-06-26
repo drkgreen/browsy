@@ -261,7 +261,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun saveSessionTabs() {
         saveCurrentTabState()
-        val raw = tabs.joinToString("\n") { tab -> "${tab.url ?: ""}::${tab.title}" }
+        val raw = tabs.filterNot { it.isPrivate }.joinToString("\n") { tab -> "${tab.url ?: ""}::${tab.title}" }
         getSharedPreferences("via_lite_prefs", MODE_PRIVATE).edit().putString("session_tabs", raw).apply()
     }
 
@@ -732,7 +732,9 @@ class MainActivity : AppCompatActivity() {
                 if (!binding.editUrl.hasFocus()) {
                     binding.editUrl.setText(view.title?.takeIf { it.isNotBlank() } ?: url)
                 }
-                historyManager.addHistoryEntry(view.title?.takeIf { it.isNotBlank() } ?: url, url)
+                if (!currentTab().isPrivate) {
+                    historyManager.addHistoryEntry(view.title?.takeIf { it.isNotBlank() } ?: url, url)
+                }
                 binding.swipeRefresh.isRefreshing = false
                 showBars()
                 applyThemeColorFromPage()
@@ -1473,6 +1475,13 @@ class MainActivity : AppCompatActivity() {
         restoreCurrentTab()
     }
 
+    private fun addNewPrivateTab() {
+        saveCurrentTabState()
+        tabs.add(TabInfo(id = tabManager.nextId(), title = "Gizli Sekme", isPrivate = true))
+        currentTabIndex = tabs.size - 1
+        restoreCurrentTab()
+    }
+
     // window.open()/target="_blank" ile açılan popup'lar için: yeni sekme
     // kaydını oluşturur ama henüz WebView'ini yaratmaz/yüklemez -- çağıran
     // taraf (onCreateWindow) hedef URL'yi tab.url'e atayıp restoreCurrentTab()
@@ -1492,6 +1501,16 @@ class MainActivity : AppCompatActivity() {
         val wasCurrent = index == currentTabIndex
         val closedTab = tabManager.closeTab(index, switchToIndex) ?: return
         destroyTabWebView(closedTab)
+
+        // Son gizli sekme de kapandıysa, o oturuma ait çerez/depo verisini temizle.
+        // NOT: CookieManager uygulama genelinde paylaşılan tek bir nesne olduğundan,
+        // o anda AÇIK normal bir sekme varsa onun çerezleri de etkilenebilir --
+        // WebView'in tasarımı sekme bazlı tam izolasyona izin vermiyor.
+        if (closedTab.isPrivate && tabs.none { it.isPrivate }) {
+            CookieManager.getInstance().removeAllCookies(null)
+            CookieManager.getInstance().flush()
+            WebStorage.getInstance().deleteAllData()
+        }
 
         if (wasCurrent || switchToIndex != null) {
             restoreCurrentTab()
@@ -1534,6 +1553,7 @@ class MainActivity : AppCompatActivity() {
             container.addView(buildTabRow(tab, index, dialog))
         }
         container.addView(buildAddTabRow(dialog))
+        container.addView(buildAddPrivateTabRow(dialog))
 
         dialog.setContentView(scrollView)
         dialog.show()
@@ -1544,6 +1564,9 @@ class MainActivity : AppCompatActivity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(12), dp(12), dp(12), dp(12))
+            if (tab.isPrivate) {
+                setBackgroundColor(0xFF2B2B2B.toInt())
+            }
             isClickable = true
             isFocusable = true
             setOnClickListener {
@@ -1552,7 +1575,16 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        val iconView: View = if (tab.favicon != null) {
+        val iconView: View = if (tab.isPrivate) {
+            ImageView(this).apply {
+                layoutParams = LinearLayout.LayoutParams(dp(36), dp(36))
+                scaleType = ImageView.ScaleType.CENTER_INSIDE
+                background = circleDrawable(0xFF000000.toInt())
+                setPadding(dp(6), dp(6), dp(6), dp(6))
+                setImageResource(R.drawable.ic_incognito)
+                setColorFilter(Color.WHITE)
+            }
+        } else if (tab.favicon != null) {
             ImageView(this).apply {
                 layoutParams = LinearLayout.LayoutParams(dp(36), dp(36))
                 scaleType = ImageView.ScaleType.CENTER_CROP
@@ -1581,14 +1613,14 @@ class MainActivity : AppCompatActivity() {
             textSize = 15f
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
-            setTextColor(0xFF1A1A1A.toInt())
+            setTextColor(if (tab.isPrivate) Color.WHITE else 0xFF1A1A1A.toInt())
         }
 
         val closeView = ImageView(this).apply {
             layoutParams = LinearLayout.LayoutParams(dp(36), dp(36))
             setPadding(dp(8), dp(8), dp(8), dp(8))
             setImageResource(R.drawable.ic_close)
-            setColorFilter(0xFF8E8E93.toInt())
+            setColorFilter(if (tab.isPrivate) Color.WHITE else 0xFF8E8E93.toInt())
             isClickable = true
             isFocusable = true
             setOnClickListener {
@@ -1637,6 +1669,44 @@ class MainActivity : AppCompatActivity() {
         }
 
         row.addView(plusIcon)
+        row.addView(label)
+        return row
+    }
+
+    private fun buildAddPrivateTabRow(dialog: BottomSheetDialog): View {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(12), dp(14), dp(12), dp(14))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                addNewPrivateTab()
+                dialog.dismiss()
+            }
+        }
+
+        val icon = ImageView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(36), dp(36))
+            scaleType = ImageView.ScaleType.CENTER_INSIDE
+            background = circleDrawable(0xFF000000.toInt())
+            setPadding(dp(6), dp(6), dp(6), dp(6))
+            setImageResource(R.drawable.ic_incognito)
+            setColorFilter(Color.WHITE)
+        }
+
+        val label = TextView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                0,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                1f
+            ).apply { marginStart = dp(12) }
+            text = "Gizli Sekme Aç"
+            textSize = 15f
+            setTextColor(0xFF1A1A1A.toInt())
+        }
+
+        row.addView(icon)
         row.addView(label)
         return row
     }
