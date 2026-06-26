@@ -14,7 +14,8 @@ data class TabInfo(
     var favicon: Bitmap? = null,
     var isDesktopMode: Boolean = false,
     var openerTabId: Long? = null,
-    var webView: NestedScrollWebView? = null
+    var webView: NestedScrollWebView? = null,
+    var isPrivate: Boolean = false
 )
 
 /**
