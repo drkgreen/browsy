@@ -1170,6 +1170,7 @@ class MainActivity : AppCompatActivity() {
                         handled = true
                         prepareNewTabForPopup()
                         binding.webView.loadUrl(url)
+                        binding.webView.clearHistory()
                         v.stopLoading()
                         v.post { v.destroy() }
                     }
@@ -1736,16 +1737,23 @@ class MainActivity : AppCompatActivity() {
                 showBrowser()
             }
             !tab.url.isNullOrBlank() -> {
+                // loadUrl, restoreState gibi geçmişi tamamen değiştirmiyor;
+                // önceki sekmenin back-stack'i paylaşılan WebView'de kalır.
+                // clearHistory bunu temizleyip bu sekmeyi gerçekten "yeni"
+                // bir gezinme noktası yapıyor.
                 binding.webView.loadUrl(tab.url!!)
+                binding.webView.clearHistory()
                 showBrowser()
             }
             else -> {
                 val customUrl = getCustomStartUrlIfEnabled()
                 if (!customUrl.isNullOrBlank()) {
                     binding.webView.loadUrl(customUrl)
+                    binding.webView.clearHistory()
                     showBrowser()
                 } else {
                     binding.webView.loadUrl("about:blank")
+                    binding.webView.clearHistory()
                     showHomeScreen()
                 }
             }
