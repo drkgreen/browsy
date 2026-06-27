@@ -615,16 +615,6 @@ class MainActivity : AppCompatActivity() {
 
         container.addView(buildSiteSectionDivider())
 
-        listOf(
-            "camera" to "Kamera",
-            "microphone" to "Mikrofon",
-            "location" to "Konum"
-        ).forEach { (type, label) ->
-            container.addView(buildSitePermissionRow(host, type, label))
-        }
-
-        container.addView(buildSiteSectionDivider())
-
         container.addView(
             buildSiteActionRow("Okuma Modu", "Reklamsız, sade görünüm") {
                 dialog.dismiss()
@@ -688,27 +678,6 @@ class MainActivity : AppCompatActivity() {
         return row
     }
 
-    private fun buildSitePermissionRow(host: String, type: String, label: String): View {
-        val decision = sitePermissionsManager.getSitePermissionDecision(host, type)
-        val subtitle = when (decision) {
-            "allow" -> "İzin Verildi"
-            "deny" -> "Reddedildi"
-            else -> "Sorulacak"
-        }
-        return buildSiteActionRow(label, subtitle) {
-            val options = arrayOf("Sorulacak", "İzin Ver", "Reddet")
-            AlertDialog.Builder(this)
-                .setTitle(label)
-                .setItems(options) { _, which ->
-                    when (which) {
-                        1 -> sitePermissionsManager.setSitePermissionDecision(host, type, "allow")
-                        2 -> sitePermissionsManager.setSitePermissionDecision(host, type, "deny")
-                    }
-                }
-                .show()
-        }
-    }
-
     private fun buildSiteSectionDivider(): View {
         return View(this).apply {
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1)).apply {
@@ -720,25 +689,60 @@ class MainActivity : AppCompatActivity() {
     }
 
     // Tam bir Readability.js portu (örn. readability4j) eklemek yeni bir
-    // bağımlılık gerektirir; bunun yerine bağımlılıksız, basit bir CSS/JS
-    // enjeksiyonuyla yaygın reklam/menü/sidebar alanlarını gizleyip, gövde
-    // metnini büyütüp ortalıyoruz. Gerçek içerik çıkarımı kadar güçlü değil
-    // ama ek kütüphane riski taşımıyor.
+    // bağımlılık gerektirir; bunun yerine basit bir "paragraf yoğunluğu"
+    // skorlamasıyla sayfanın asıl metin gövdesini bulup SADECE onu çıkarıp
+    // sayfanın tamamının yerine koyuyoruz -- CSS ile gizleme değil, gerçek
+    // çıkarma+değiştirme (Fulguris'in readability4j ile yaptığının JS'teki
+    // basitleştirilmiş karşılığı).
     private fun enableReadingMode() {
-        val js = "(function(){" +
-            "var css='body{max-width:680px !important;margin:0 auto !important;" +
-            "padding:16px !important;font-size:19px !important;line-height:1.6 !important;" +
-            "background:#fff !important;color:#222 !important;}" +
-            "header,nav,aside,footer,.sidebar,.ad,.ads,.advertisement,[class*=\"ad-\"],[id*=\"ad-\"]," +
-            "[class*=\"banner\"],[class*=\"popup\"],[class*=\"cookie\"]{display:none !important;}" +
-            "img,video,iframe{max-width:100% !important;height:auto !important;}';" +
-            "var style=document.createElement('style');" +
-            "style.id='via-reading-mode-style';" +
-            "style.textContent=css;" +
-            "document.head.appendChild(style);" +
-            "})();"
-        currentWebView().evaluateJavascript(js, null)
-        Toast.makeText(this, "Okuma modu uygulandı", Toast.LENGTH_SHORT).show()
+        val js = """
+            (function(){
+                var paragraphs = document.querySelectorAll('p');
+                for (var i = 0; i < paragraphs.length; i++) {
+                    var p = paragraphs[i];
+                    var text = p.textContent || '';
+                    if (text.length < 25) continue;
+                    var parent = p.parentElement;
+                    if (!parent) continue;
+                    parent.dataset.viaScore = (parseInt(parent.dataset.viaScore) || 0) + text.length;
+                }
+                var candidates = document.querySelectorAll('[data-via-score]');
+                var best = null, bestScore = 0;
+                for (var j = 0; j < candidates.length; j++) {
+                    var score = parseInt(candidates[j].dataset.viaScore) || 0;
+                    if (score > bestScore) {
+                        bestScore = score;
+                        best = candidates[j];
+                    }
+                }
+                if (!best) return false;
+                var titleText = document.title || '';
+                var nodes = best.querySelectorAll('p, h1, h2, h3, blockquote, li');
+                var html = '<h1>' + titleText.replace(/</g,'&lt;') + '</h1>';
+                for (var k = 0; k < nodes.length; k++) {
+                    var tag = nodes[k].tagName.toLowerCase();
+                    var txt = (nodes[k].textContent || '').trim();
+                    if (txt.length > 0) {
+                        html += '<' + tag + '>' + txt.replace(/</g,'&lt;') + '</' + tag + '>';
+                    }
+                }
+                document.documentElement.innerHTML =
+                    '<head><meta name="viewport" content="width=device-width,initial-scale=1">' +
+                    '<style>body{max-width:680px;margin:0 auto;padding:20px;' +
+                    'font-size:19px;line-height:1.7;background:#fff;color:#222;' +
+                    'font-family:sans-serif;}h1{font-size:26px;margin-bottom:12px;}' +
+                    'img,video,iframe{display:none;}</style></head>' +
+                    '<body>' + html + '</body>';
+                return true;
+            })();
+        """.trimIndent()
+        currentWebView().evaluateJavascript(js) { result ->
+            if (result == "false" || result == "null") {
+                Toast.makeText(this, "Bu sayfada okuma modu için yeterli metin bulunamadı", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "Okuma modu uygulandı", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
 
