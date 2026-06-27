@@ -196,10 +196,15 @@
         android:layout_gravity="bottom"
         android:orientation="vertical">
 
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#DDDDDD" />
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="52dp"
-            android:background="@color/bottomNavBackground"
+            android:background="#FFFFFF"
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
@@ -212,7 +217,6 @@
                 android:contentDescription="@string/back"
                 android:scaleType="centerInside"
                 android:padding="12dp"
-                android:tint="#FFFFFF"
                 android:src="@drawable/ic_back" />
 
             <ImageButton
@@ -224,7 +228,6 @@
                 android:contentDescription="@string/forward"
                 android:scaleType="centerInside"
                 android:padding="12dp"
-                android:tint="#FFFFFF"
                 android:src="@drawable/ic_forward" />
 
             <ImageButton
@@ -236,7 +239,6 @@
                 android:contentDescription="@string/home"
                 android:scaleType="centerInside"
                 android:padding="12dp"
-                android:tint="#FFFFFF"
                 android:src="@drawable/ic_home" />
 
             <FrameLayout
@@ -250,10 +252,9 @@
                 <ImageView
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:padding="14dp"
+                    android:padding="11dp"
                     android:importantForAccessibility="no"
                     android:scaleType="fitCenter"
-                    android:tint="#FFFFFF"
                     android:src="@drawable/ic_tab_square" />
 
                 <TextView
@@ -263,7 +264,7 @@
                     android:layout_gravity="center"
                     android:includeFontPadding="false"
                     android:text="1"
-                    android:textColor="#FFFFFF"
+                    android:textColor="#3C3C43"
                     android:textSize="11sp"
                     android:textStyle="bold" />
 
@@ -277,8 +278,7 @@
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="@string/menu"
                 android:scaleType="centerInside"
-                android:padding="12dp"
-                android:tint="#FFFFFF"
+                android:padding="9dp"
                 android:src="@drawable/ic_hamburger" />
 
         </LinearLayout>
