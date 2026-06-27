@@ -348,7 +348,12 @@ class BookmarksManager(
             }
         }
 
-        val iconView: View = if (icon != null && !isAddTile) {
+        // Bazı siteler favicon isteğine geçerli ama anlamsız (1x1, bozuk)
+        // bir görsel döndürüyor -- bu durumda boş bir alan göstermek yerine
+        // baş harf fallback'ine düşmemiz gerekiyor.
+        val hasUsableIcon = icon != null && icon.width >= 8 && icon.height >= 8
+
+        val iconView: View = if (hasUsableIcon && !isAddTile) {
             ImageView(context).apply {
                 layoutParams = LinearLayout.LayoutParams(iconSize, iconSize)
                 scaleType = ImageView.ScaleType.CENTER_CROP
