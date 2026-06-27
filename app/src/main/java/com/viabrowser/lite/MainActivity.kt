@@ -640,6 +640,15 @@ class MainActivity : AppCompatActivity() {
             setSupportMultipleWindows(true)
             javaScriptCanOpenWindowsAutomatically = true
         }
+        // Parola kaydetme/doldurma için kendi bir depo yapmıyoruz -- bunun
+        // yerine WebView'i Android'in sistem Autofill Framework'üne (kullanıcının
+        // seçtiği Google Şifre Yöneticisi/Bitwarden/1Password vb.) açıyoruz.
+        // Fulguris, woheller69/browser ve Lightning Browser'ın hepsi aynı
+        // yaklaşımı kullanıyor -- kendi parola deposu güvenlik riski taşır,
+        // sistemin servisi zaten test edilmiş ve güvenli.
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            webView.importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_YES
+        }
         if (defaultUserAgent == null) {
             defaultUserAgent = webView.settings.userAgentString
         }
