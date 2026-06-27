@@ -40,6 +40,7 @@ import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
@@ -202,12 +203,49 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun isAdBlockEnabled(): Boolean {
+    private fun isAdBlockEnabled(host: String? = null): Boolean {
+        if (host != null) {
+            val override = getSiteOverride("site_adblock_override", host)
+            if (override != null) return override
+        }
         return getSharedPreferences("via_lite_prefs", MODE_PRIVATE).getBoolean("ad_block_enabled", true)
     }
 
     private fun setAdBlockEnabled(enabled: Boolean) {
         getSharedPreferences("via_lite_prefs", MODE_PRIVATE).edit().putBoolean("ad_block_enabled", enabled).apply()
+    }
+
+    // ---- Site-bazlı aç/kapa ayarları (AdBlock, JavaScript) ----
+    // Yazı boyutuyla aynı host::değer deseni; tek bir genel fonksiyonla
+    // hem AdBlock hem JavaScript override'ları aynı şekilde okunup yazılıyor.
+
+    private fun getSiteOverride(prefKey: String, host: String): Boolean? {
+        val raw = getSharedPreferences("via_lite_prefs", MODE_PRIVATE).getString(prefKey, "") ?: ""
+        if (raw.isBlank()) return null
+        raw.split("\n").forEach { line ->
+            val parts = line.split("::")
+            if (parts.size == 2 && parts[0] == host) {
+                return parts[1].toBoolean()
+            }
+        }
+        return null
+    }
+
+    private fun setSiteOverride(prefKey: String, host: String, value: Boolean) {
+        val prefs = getSharedPreferences("via_lite_prefs", MODE_PRIVATE)
+        val raw = prefs.getString(prefKey, "") ?: ""
+        val lines = if (raw.isBlank()) mutableListOf() else raw.split("\n").toMutableList()
+        val filtered = lines.filterNot { it.split("::").getOrNull(0) == host }.toMutableList()
+        filtered.add("$host::$value")
+        prefs.edit().putString(prefKey, filtered.joinToString("\n")).apply()
+    }
+
+    private fun isJavaScriptEnabledFor(host: String?): Boolean {
+        if (host != null) {
+            val override = getSiteOverride("site_javascript_override", host)
+            if (override != null) return override
+        }
+        return true
     }
 
     private fun isHostBlocked(host: String): Boolean {
@@ -523,6 +561,187 @@ class MainActivity : AppCompatActivity() {
         prefs.edit().putString("site_text_zoom", filtered.joinToString("\n")).apply()
     }
 
+    // ---- Site Ayarları paneli (adres çubuğunun solundaki kalkan ikonu) ----
+
+    private fun showSiteSettingsPanel() {
+        val host = currentHost()
+        if (host.isNullOrBlank()) {
+            Toast.makeText(this, "Ayarlanacak bir sayfa yok", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val dialog = BottomSheetDialog(this)
+        val scrollView = android.widget.ScrollView(this)
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(16), 0, dp(24))
+        }
+        scrollView.addView(container)
+
+        container.addView(
+            TextView(this).apply {
+                text = host
+                textSize = 13f
+                setTextColor(0xFF8E8E93.toInt())
+                setPadding(dp(20), 0, dp(20), dp(12))
+            }
+        )
+
+        container.addView(
+            buildSiteSwitchRow("Reklam Engelleme", isAdBlockEnabled(host)) { checked ->
+                setSiteOverride("site_adblock_override", host, checked)
+            }
+        )
+
+        container.addView(
+            buildSiteSwitchRow("JavaScript", isJavaScriptEnabledFor(host)) { checked ->
+                setSiteOverride("site_javascript_override", host, checked)
+                currentWebView().reload()
+            }
+        )
+
+        container.addView(
+            buildSiteActionRow("Yazı Boyutu", "%${effectiveTextZoomFor(host)}") {
+                dialog.dismiss()
+                showSiteTextZoomDialog()
+            }
+        )
+
+        container.addView(
+            buildSiteSwitchRow("Masaüstü Sitesi", currentTab().isDesktopMode) {
+                toggleDesktopMode()
+            }
+        )
+
+        container.addView(buildSiteSectionDivider())
+
+        listOf(
+            "camera" to "Kamera",
+            "microphone" to "Mikrofon",
+            "location" to "Konum"
+        ).forEach { (type, label) ->
+            container.addView(buildSitePermissionRow(host, type, label))
+        }
+
+        container.addView(buildSiteSectionDivider())
+
+        container.addView(
+            buildSiteActionRow("Okuma Modu", "Reklamsız, sade görünüm") {
+                dialog.dismiss()
+                enableReadingMode()
+            }
+        )
+
+        dialog.setContentView(scrollView)
+        dialog.show()
+    }
+
+    private fun buildSiteSwitchRow(title: String, checked: Boolean, onToggle: (Boolean) -> Unit): View {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(20), dp(12), dp(20), dp(12))
+        }
+        val titleView = TextView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            text = title
+            textSize = 15f
+            setTextColor(0xFF1A1A1A.toInt())
+        }
+        val switch = Switch(this).apply {
+            isChecked = checked
+            setOnCheckedChangeListener { _, isChecked -> onToggle(isChecked) }
+        }
+        row.isClickable = true
+        row.setOnClickListener { switch.isChecked = !switch.isChecked }
+        row.addView(titleView)
+        row.addView(switch)
+        return row
+    }
+
+    private fun buildSiteActionRow(title: String, subtitle: String?, onClick: () -> Unit): View {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(20), dp(14), dp(20), dp(14))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { onClick() }
+        }
+        row.addView(
+            TextView(this).apply {
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                text = title
+                textSize = 15f
+                setTextColor(0xFF1A1A1A.toInt())
+            }
+        )
+        if (subtitle != null) {
+            row.addView(
+                TextView(this).apply {
+                    text = subtitle
+                    textSize = 13f
+                    setTextColor(0xFF8E8E93.toInt())
+                }
+            )
+        }
+        return row
+    }
+
+    private fun buildSitePermissionRow(host: String, type: String, label: String): View {
+        val decision = sitePermissionsManager.getSitePermissionDecision(host, type)
+        val subtitle = when (decision) {
+            "allow" -> "İzin Verildi"
+            "deny" -> "Reddedildi"
+            else -> "Sorulacak"
+        }
+        return buildSiteActionRow(label, subtitle) {
+            val options = arrayOf("Sorulacak", "İzin Ver", "Reddet")
+            AlertDialog.Builder(this)
+                .setTitle(label)
+                .setItems(options) { _, which ->
+                    when (which) {
+                        1 -> sitePermissionsManager.setSitePermissionDecision(host, type, "allow")
+                        2 -> sitePermissionsManager.setSitePermissionDecision(host, type, "deny")
+                    }
+                }
+                .show()
+        }
+    }
+
+    private fun buildSiteSectionDivider(): View {
+        return View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1)).apply {
+                topMargin = dp(8)
+                bottomMargin = dp(8)
+            }
+            setBackgroundColor(0xFFEEEEEE.toInt())
+        }
+    }
+
+    // Tam bir Readability.js portu (örn. readability4j) eklemek yeni bir
+    // bağımlılık gerektirir; bunun yerine bağımlılıksız, basit bir CSS/JS
+    // enjeksiyonuyla yaygın reklam/menü/sidebar alanlarını gizleyip, gövde
+    // metnini büyütüp ortalıyoruz. Gerçek içerik çıkarımı kadar güçlü değil
+    // ama ek kütüphane riski taşımıyor.
+    private fun enableReadingMode() {
+        val js = "(function(){" +
+            "var css='body{max-width:680px !important;margin:0 auto !important;" +
+            "padding:16px !important;font-size:19px !important;line-height:1.6 !important;" +
+            "background:#fff !important;color:#222 !important;}" +
+            "header,nav,aside,footer,.sidebar,.ad,.ads,.advertisement,[class*=\"ad-\"],[id*=\"ad-\"]," +
+            "[class*=\"banner\"],[class*=\"popup\"],[class*=\"cookie\"]{display:none !important;}" +
+            "img,video,iframe{max-width:100% !important;height:auto !important;}';" +
+            "var style=document.createElement('style');" +
+            "style.id='via-reading-mode-style';" +
+            "style.textContent=css;" +
+            "document.head.appendChild(style);" +
+            "})();"
+        currentWebView().evaluateJavascript(js, null)
+        Toast.makeText(this, "Okuma modu uygulandı", Toast.LENGTH_SHORT).show()
+    }
+
+
     private fun showSiteTextZoomDialog() {
         val host = currentHost()
         if (host.isNullOrBlank()) {
@@ -710,17 +929,20 @@ class MainActivity : AppCompatActivity() {
 
             override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
                 super.onPageStarted(view, url, favicon)
+                val host = Uri.parse(url).host
                 // Yazı boyutu sayfa boyanmadan önce uygulanmalı; aksi halde
                 // kullanıcı önce varsayılan boyutla render edilen sayfayı
                 // görüp sonra site-özel boyuta "zıpladığını" fark ediyor.
-                view.settings.textZoom = effectiveTextZoomFor(Uri.parse(url).host)
+                view.settings.textZoom = effectiveTextZoomFor(host)
+                view.settings.javaScriptEnabled = isJavaScriptEnabledFor(host)
             }
 
             override fun shouldInterceptRequest(
                 view: WebView,
                 request: WebResourceRequest
             ): WebResourceResponse? {
-                if (isAdBlockEnabled()) {
+                val pageHost = view.url?.let { Uri.parse(it).host?.lowercase() }
+                if (isAdBlockEnabled(pageHost)) {
                     val host = request.url.host?.lowercase() ?: ""
                     if (isHostBlocked(host)) {
                         return WebResourceResponse(
@@ -990,6 +1212,9 @@ class MainActivity : AppCompatActivity() {
                 false
             }
         }
+        binding.btnSiteSettings.setOnClickListener {
+            showSiteSettingsPanel()
+        }
         binding.editUrl.setOnFocusChangeListener { _, hasFocus ->
             if (hasFocus) {
                 suppressUrlFocusRevert = false
@@ -1205,18 +1430,6 @@ class MainActivity : AppCompatActivity() {
             ) {
                 dialog.dismiss()
                 toggleDesktopMode()
-            }
-        )
-
-        container2.addView(
-            buildFunctionMenuCard(
-                iconRes = R.drawable.ic_text_size,
-                label = "Yazı Boyutu",
-                statusText = "%${effectiveTextZoomFor(currentHost())}",
-                isActive = false
-            ) {
-                dialog.dismiss()
-                showSiteTextZoomDialog()
             }
         )
 
