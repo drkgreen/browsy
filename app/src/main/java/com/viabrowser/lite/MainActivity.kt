@@ -930,6 +930,12 @@ class MainActivity : AppCompatActivity() {
             override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
                 super.onPageStarted(view, url, favicon)
                 val host = Uri.parse(url).host
+                // shouldInterceptRequest UI thread'i DIŞINDA çalıştığı için
+                // oradan view.url çağırmak (native WebView state'ine thread-safe
+                // olmayan erişim) çökmelere yol açıyordu. Host'u burada (UI
+                // thread'de) view.tag'e yazıp, orada sadece bu basit alanı
+                // okuyoruz -- gerçek bir WebView metodu çağırmıyoruz.
+                view.tag = host
                 // Yazı boyutu sayfa boyanmadan önce uygulanmalı; aksi halde
                 // kullanıcı önce varsayılan boyutla render edilen sayfayı
                 // görüp sonra site-özel boyuta "zıpladığını" fark ediyor.
@@ -941,7 +947,7 @@ class MainActivity : AppCompatActivity() {
                 view: WebView,
                 request: WebResourceRequest
             ): WebResourceResponse? {
-                val pageHost = view.url?.let { Uri.parse(it).host?.lowercase() }
+                val pageHost = view.tag as? String
                 if (isAdBlockEnabled(pageHost)) {
                     val host = request.url.host?.lowercase() ?: ""
                     if (isHostBlocked(host)) {
