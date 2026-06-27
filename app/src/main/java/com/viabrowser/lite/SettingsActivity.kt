@@ -1,7 +1,6 @@
 package com.viabrowser.lite
 
 import android.content.Intent
-import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
@@ -29,15 +28,29 @@ import com.viabrowser.lite.databinding.ActivitySettingsBinding
 class SettingsActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivitySettingsBinding
+    private var currentCategory: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivitySettingsBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        binding.btnSettingsBack.setOnClickListener { finish() }
+        binding.btnSettingsBack.setOnClickListener { navigateBack() }
 
         buildSettingsList()
+    }
+
+    override fun onBackPressed() {
+        navigateBack()
+    }
+
+    private fun navigateBack() {
+        if (currentCategory != null) {
+            currentCategory = null
+            buildSettingsList()
+        } else {
+            finish()
+        }
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
@@ -52,45 +65,86 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun buildSettingsList() {
         binding.settingsContainer.removeAllViews()
-        binding.settingsContainer.addView(buildSectionHeader("Genel"))
-        binding.settingsContainer.addView(buildSearchEngineRow())
-        binding.settingsContainer.addView(buildDivider())
-        binding.settingsContainer.addView(buildStartPageRow())
-        binding.settingsContainer.addView(buildDivider())
-        binding.settingsContainer.addView(buildStartupBehaviorRow())
-        binding.settingsContainer.addView(buildDivider())
-        binding.settingsContainer.addView(buildDefaultBrowserRow())
-
-        binding.settingsContainer.addView(buildSectionHeader("Görünüm"))
-        binding.settingsContainer.addView(buildForceDarkRow())
-        binding.settingsContainer.addView(buildDivider())
-        binding.settingsContainer.addView(buildTextZoomRow())
-
-        binding.settingsContainer.addView(buildSectionHeader("Gizlilik ve Güvenlik"))
-        binding.settingsContainer.addView(buildClearDataRow())
-        binding.settingsContainer.addView(buildDivider())
-        binding.settingsContainer.addView(buildThirdPartyCookiesRow())
-        binding.settingsContainer.addView(buildDivider())
-        binding.settingsContainer.addView(buildSitePermissionsRow())
-
-        binding.settingsContainer.addView(buildSectionHeader("Otomatik Doldurma"))
-        binding.settingsContainer.addView(buildSavedAddressesRow())
-        binding.settingsContainer.addView(buildDivider())
-        binding.settingsContainer.addView(buildSystemAutofillRow())
-
-        binding.settingsContainer.addView(buildSectionHeader("İndirilenler"))
-        binding.settingsContainer.addView(buildAskBeforeDownloadRow())
-        binding.settingsContainer.addView(buildDivider())
-        binding.settingsContainer.addView(buildDownloadNotificationsRow())
+        val category = currentCategory
+        if (category == null) {
+            binding.settingsTitle.text = "Ayarlar"
+            buildRootCategoryList()
+        } else {
+            binding.settingsTitle.text = category
+            buildCategoryDetail(category)
+        }
     }
 
-    private fun buildSectionHeader(text: String): View {
-        return TextView(this).apply {
-            setPadding(dp(16), dp(16), dp(16), dp(8))
-            this.text = text
-            textSize = 13f
-            setTextColor(0xFF1976D2.toInt())
-            setTypeface(typeface, Typeface.BOLD)
+    private fun buildRootCategoryList() {
+        binding.settingsContainer.addView(
+            buildSettingsRow("Genel", "Arama motoru, açılış sayfası", R.drawable.ic_globe, showChevron = true) {
+                currentCategory = "Genel"
+                buildSettingsList()
+            }
+        )
+        binding.settingsContainer.addView(buildDivider())
+        binding.settingsContainer.addView(
+            buildSettingsRow("Görünüm", "Karartma, yazı boyutu", R.drawable.ic_moon, showChevron = true) {
+                currentCategory = "Görünüm"
+                buildSettingsList()
+            }
+        )
+        binding.settingsContainer.addView(buildDivider())
+        binding.settingsContainer.addView(
+            buildSettingsRow("Gizlilik ve Güvenlik", "Veri temizleme, çerezler, izinler", R.drawable.ic_shield, showChevron = true) {
+                currentCategory = "Gizlilik ve Güvenlik"
+                buildSettingsList()
+            }
+        )
+        binding.settingsContainer.addView(buildDivider())
+        binding.settingsContainer.addView(
+            buildSettingsRow("Otomatik Doldurma", "Adresler, sistem otomatik doldurma", R.drawable.ic_autofill, showChevron = true) {
+                currentCategory = "Otomatik Doldurma"
+                buildSettingsList()
+            }
+        )
+        binding.settingsContainer.addView(buildDivider())
+        binding.settingsContainer.addView(
+            buildSettingsRow("İndirilenler", "İndirme tercihleri", R.drawable.ic_download, showChevron = true) {
+                currentCategory = "İndirilenler"
+                buildSettingsList()
+            }
+        )
+    }
+
+    private fun buildCategoryDetail(category: String) {
+        when (category) {
+            "Genel" -> {
+                binding.settingsContainer.addView(buildSearchEngineRow())
+                binding.settingsContainer.addView(buildDivider())
+                binding.settingsContainer.addView(buildStartPageRow())
+                binding.settingsContainer.addView(buildDivider())
+                binding.settingsContainer.addView(buildStartupBehaviorRow())
+                binding.settingsContainer.addView(buildDivider())
+                binding.settingsContainer.addView(buildDefaultBrowserRow())
+            }
+            "Görünüm" -> {
+                binding.settingsContainer.addView(buildForceDarkRow())
+                binding.settingsContainer.addView(buildDivider())
+                binding.settingsContainer.addView(buildTextZoomRow())
+            }
+            "Gizlilik ve Güvenlik" -> {
+                binding.settingsContainer.addView(buildClearDataRow())
+                binding.settingsContainer.addView(buildDivider())
+                binding.settingsContainer.addView(buildThirdPartyCookiesRow())
+                binding.settingsContainer.addView(buildDivider())
+                binding.settingsContainer.addView(buildSitePermissionsRow())
+            }
+            "Otomatik Doldurma" -> {
+                binding.settingsContainer.addView(buildSavedAddressesRow())
+                binding.settingsContainer.addView(buildDivider())
+                binding.settingsContainer.addView(buildSystemAutofillRow())
+            }
+            "İndirilenler" -> {
+                binding.settingsContainer.addView(buildAskBeforeDownloadRow())
+                binding.settingsContainer.addView(buildDivider())
+                binding.settingsContainer.addView(buildDownloadNotificationsRow())
+            }
         }
     }
 
@@ -112,7 +166,13 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
-    private fun buildSettingsRow(title: String, subtitle: String, iconRes: Int? = null, onClick: () -> Unit): View {
+    private fun buildSettingsRow(
+        title: String,
+        subtitle: String,
+        iconRes: Int? = null,
+        showChevron: Boolean = false,
+        onClick: () -> Unit
+    ): View {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -143,6 +203,15 @@ class SettingsActivity : AppCompatActivity() {
         textContainer.addView(titleView)
         textContainer.addView(subtitleView)
         row.addView(textContainer)
+        if (showChevron) {
+            row.addView(
+                ImageView(this).apply {
+                    layoutParams = LinearLayout.LayoutParams(dp(20), dp(20))
+                    setImageResource(R.drawable.ic_forward)
+                    scaleType = ImageView.ScaleType.FIT_CENTER
+                }
+            )
+        }
         return row
     }
 
