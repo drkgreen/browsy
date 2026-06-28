@@ -64,6 +64,41 @@ class HistoryManager(private val context: Context) {
         return fmt.format(java.util.Date(ts))
     }
 
+    private fun formatTimeOnly(ts: Long): String {
+        val fmt = java.text.SimpleDateFormat("HH:mm", java.util.Locale("tr"))
+        return fmt.format(java.util.Date(ts))
+    }
+
+    // "Bugün" / "Dün" / "25 Haziran 2026" gibi gün başlığı üretir; geçmiş
+    // listesini bu başlıklara göre gruplamak için kullanılıyor.
+    private fun dateLabelFor(timestamp: Long): String {
+        val entryDay = java.util.Calendar.getInstance().apply { timeInMillis = timestamp }
+        val today = java.util.Calendar.getInstance()
+        val yesterday = java.util.Calendar.getInstance().apply { add(java.util.Calendar.DAY_OF_YEAR, -1) }
+
+        fun sameDay(a: java.util.Calendar, b: java.util.Calendar): Boolean =
+            a.get(java.util.Calendar.YEAR) == b.get(java.util.Calendar.YEAR) &&
+                a.get(java.util.Calendar.DAY_OF_YEAR) == b.get(java.util.Calendar.DAY_OF_YEAR)
+
+        return when {
+            sameDay(entryDay, today) -> "Bugün"
+            sameDay(entryDay, yesterday) -> "Dün"
+            else -> {
+                val fmt = java.text.SimpleDateFormat("d MMMM yyyy", java.util.Locale("tr"))
+                fmt.format(java.util.Date(timestamp))
+            }
+        }
+    }
+
+    private fun buildDateSectionHeader(label: String): View {
+        return TextView(context).apply {
+            text = label
+            textSize = 13f
+            setTextColor(ContextCompat.getColor(context, R.color.text_secondary))
+            setPadding(dp(16), dp(14), dp(16), dp(6))
+        }
+    }
+
     fun showHistoryList(onOpenUrl: (String) -> Unit) {
         val list = loadHistory()
         val dialog = BottomSheetDialog(context)
@@ -101,8 +136,15 @@ class HistoryManager(private val context: Context) {
                 }
             )
         } else {
-            list.forEach { entry ->
-                container.addView(buildHistoryRow(entry, dialog, onOpenUrl))
+            // Liste zaten en yeni en üstte sıralı (addHistoryEntry add(0,...) ile
+            // ekliyor); groupBy bu sırayı koruyarak grupluyor, bu yüzden gün
+            // başlıkları da kronolojik (en yeni en üstte) sırada çıkıyor.
+            val grouped = list.groupBy { dateLabelFor(it.timestamp) }
+            grouped.forEach { (label, entries) ->
+                container.addView(buildDateSectionHeader(label))
+                entries.forEach { entry ->
+                    container.addView(buildHistoryRow(entry, dialog, onOpenUrl))
+                }
             }
         }
 
@@ -143,7 +185,7 @@ class HistoryManager(private val context: Context) {
         )
         row.addView(
             TextView(context).apply {
-                text = formatTimestamp(entry.timestamp)
+                text = formatTimeOnly(entry.timestamp)
                 textSize = 12f
                 setTextColor(ContextCompat.getColor(context, R.color.text_secondary))
                 setPadding(0, dp(2), 0, 0)
