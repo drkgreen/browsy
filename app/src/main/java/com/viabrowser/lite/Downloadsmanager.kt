@@ -2,6 +2,7 @@ package com.viabrowser.lite
 
 import android.app.DownloadManager
 import android.content.Context
+import androidx.core.content.ContextCompat
 import android.net.Uri
 import android.os.Environment
 import android.text.TextUtils
@@ -117,7 +118,7 @@ class DownloadsManager(private val context: Context) {
                 TextView(context).apply {
                     text = "Henüz indirilen dosya yok"
                     setPadding(dp(16), dp(16), dp(16), dp(16))
-                    setTextColor(0xFF8E8E93.toInt())
+                    setTextColor(ContextCompat.getColor(context, R.color.text_secondary))
                 }
             )
         } else {
@@ -126,7 +127,7 @@ class DownloadsManager(private val context: Context) {
                 container.addView(
                     View(context).apply {
                         layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1))
-                        setBackgroundColor(0xFFEEEEEE.toInt())
+                        setBackgroundColor(ContextCompat.getColor(context, R.color.divider))
                     }
                 )
             }
@@ -147,14 +148,14 @@ class DownloadsManager(private val context: Context) {
                 textSize = 15f
                 maxLines = 1
                 ellipsize = TextUtils.TruncateAt.END
-                setTextColor(0xFF1A1A1A.toInt())
+                setTextColor(ContextCompat.getColor(context, R.color.text_primary))
             }
         )
         row.addView(
             TextView(context).apply {
                 text = formatTimestamp(item.timestamp)
                 textSize = 12f
-                setTextColor(0xFF8E8E93.toInt())
+                setTextColor(ContextCompat.getColor(context, R.color.text_secondary))
                 setPadding(0, dp(2), 0, 0)
             }
         )
