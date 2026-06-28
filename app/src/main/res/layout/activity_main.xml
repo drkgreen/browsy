@@ -72,14 +72,14 @@
                         android:singleLine="true" />
 
                     <ImageButton
-                        android:id="@+id/btnTranslate"
+                        android:id="@+id/btnReload"
                         android:layout_width="36dp"
                         android:layout_height="36dp"
                         android:layout_marginEnd="4dp"
                         android:background="?attr/selectableItemBackgroundBorderless"
-                        android:contentDescription="Çevir"
+                        android:contentDescription="Yenile"
                         android:padding="8dp"
-                        android:src="@drawable/ic_translate" />
+                        android:src="@drawable/ic_refresh" />
 
                 </LinearLayout>
 
