@@ -536,6 +536,31 @@ class MainActivity : AppCompatActivity() {
         return getSharedPreferences("via_lite_prefs", MODE_PRIVATE).getBoolean("force_dark_web", false)
     }
 
+    // ---- Pinch-zoom %150'yi geçince metin sarmalama (text reflow) ----
+    // İdempotent: zaten doğru durumdaysa hiçbir şey yapmıyor, her
+    // onScaleChanged tetiklenişinde güvenle tekrar çağrılabiliyor.
+
+    private fun applyTextReflow(view: WebView, enable: Boolean) {
+        val js = if (enable) {
+            "(function(){" +
+                "if(document.getElementById('via-text-reflow-style'))return;" +
+                "var style=document.createElement('style');" +
+                "style.id='via-text-reflow-style';" +
+                "style.textContent='*{max-width:100vw !important;box-sizing:border-box !important;}" +
+                "body,p,div,span,td,th,li,a{word-wrap:break-word !important;overflow-wrap:break-word !important;white-space:normal !important;}" +
+                "pre{white-space:pre-wrap !important;}';" +
+                "document.head.appendChild(style);" +
+                "})();"
+        } else {
+            "(function(){" +
+                "var existing=document.getElementById('via-text-reflow-style');" +
+                "if(existing)existing.remove();" +
+                "})();"
+        }
+        view.evaluateJavascript(js, null)
+    }
+
+
     private fun applyForceDarkIfNeeded(view: WebView) {
         if (isForceDarkWebEnabled()) {
             val js = "(function(){" +
@@ -943,6 +968,16 @@ class MainActivity : AppCompatActivity() {
                 }
                 view.reload()
                 return true
+            }
+
+            override fun onScaleChanged(view: WebView, oldScale: Float, newScale: Float) {
+                super.onScaleChanged(view, oldScale, newScale)
+                // Pinch-zoom %150'yi geçince metni büyütmek yerine (textZoom
+                // ile çift katmanlı büyüme/bozulma riski olurdu) sayfanın
+                // GENİŞLİK sınırlarını zorluyoruz -- taşan içerik sarmaya
+                // zorlanıyor, yatay kaydırma ihtiyacı büyük ölçüde kalkıyor.
+                // Zoom geri düşünce normal görünüme dönülüyor.
+                applyTextReflow(view, newScale > 1.5f)
             }
 
             override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean {
