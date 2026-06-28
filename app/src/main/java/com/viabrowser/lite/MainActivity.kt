@@ -288,7 +288,36 @@ class MainActivity : AppCompatActivity() {
             tabs.add(TabInfo(id = tabManager.nextId()))
         }
         currentTabIndex = 0
+
+        // "Şununla Aç" / başka bir uygulamadan paylaşılan link -- bu, açılış
+        // sayfasından veya kaldığımız oturumdan önceliklidir, kullanıcı
+        // bilerek bu linki Browsy ile açmayı seçti.
+        val incomingUrl = incomingViewUrl(intent)
+        if (!incomingUrl.isNullOrBlank()) {
+            tabs.add(TabInfo(id = tabManager.nextId(), url = incomingUrl))
+            currentTabIndex = tabs.size - 1
+        }
+
         restoreCurrentTab()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        // launchMode="singleTask" olduğu için uygulama zaten açıkken "Şununla
+        // Aç" ile tekrar çağrılırsa onCreate değil bu çalışır -- linki yeni
+        // bir sekmede açıyoruz.
+        val incomingUrl = incomingViewUrl(intent)
+        if (!incomingUrl.isNullOrBlank()) {
+            addNewTab()
+            showBrowser()
+            currentWebView().loadUrl(incomingUrl)
+        }
+    }
+
+    private fun incomingViewUrl(intent: Intent?): String? {
+        if (intent?.action != Intent.ACTION_VIEW) return null
+        return intent.data?.toString()
     }
 
     override fun onPause() {
@@ -1227,17 +1256,8 @@ class MainActivity : AppCompatActivity() {
         binding.btnSiteSettings.setOnClickListener {
             showSiteSettingsPanel()
         }
-        binding.btnTranslate.setOnClickListener {
-            val url = currentWebView().url
-            if (url.isNullOrBlank() || url == "about:blank") {
-                Toast.makeText(this, "Çevrilecek bir sayfa yok", Toast.LENGTH_SHORT).show()
-            } else {
-                val encoded = Uri.encode(url)
-                val translateUrl = "https://translate.google.com/translate?sl=auto&tl=tr&u=$encoded"
-                addNewTab()
-                showBrowser()
-                currentWebView().loadUrl(translateUrl)
-            }
+        binding.btnReload.setOnClickListener {
+            currentWebView().reload()
         }
         binding.editUrl.setOnFocusChangeListener { _, hasFocus ->
             if (hasFocus) {
@@ -1420,6 +1440,32 @@ class MainActivity : AppCompatActivity() {
             orientation = LinearLayout.HORIZONTAL
             setPadding(dp(8), dp(8), dp(8), dp(8))
         }
+
+        container2.addView(
+            buildFunctionMenuCard(
+                iconRes = R.drawable.ic_translate,
+                label = "Çevir",
+                statusText = null,
+                isActive = false
+            ) {
+                dialog.dismiss()
+                val url = currentWebView().url
+                if (url.isNullOrBlank() || url == "about:blank") {
+                    Toast.makeText(this, "Çevrilecek bir sayfa yok", Toast.LENGTH_SHORT).show()
+                } else {
+                    val encoded = Uri.encode(url)
+                    val translateUrl = "https://translate.google.com/translate?sl=auto&tl=tr&u=$encoded"
+                    addNewTab()
+                    showBrowser()
+                    // WebView'in varsayılan User-Agent'i "wv" (WebView) işareti taşıyor;
+                    // Google'ın çeviri proxy'si bunu şüpheli görüp "Just a moment..."
+                    // bot koruma ekranı gösterebiliyor. Masaüstü Chrome UA'sı kullanmak
+                    // bunu aşıyor (masaüstü modunda da aynı yöntemi kullanıyoruz).
+                    currentWebView().settings.userAgentString = DESKTOP_USER_AGENT
+                    currentWebView().loadUrl(translateUrl)
+                }
+            }
+        )
 
         container2.addView(
             buildFunctionMenuCard(
