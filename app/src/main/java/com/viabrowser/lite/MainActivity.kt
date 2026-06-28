@@ -537,26 +537,36 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ---- Pinch-zoom %150'yi geçince metin sarmalama (text reflow) ----
-    // İdempotent: zaten doğru durumdaysa hiçbir şey yapmıyor, her
-    // onScaleChanged tetiklenişinde güvenle tekrar çağrılabiliyor.
-
-    private fun applyTextReflow(view: WebView, enable: Boolean) {
-        val js = if (enable) {
-            "(function(){" +
-                "if(document.getElementById('via-text-reflow-style'))return;" +
-                "var style=document.createElement('style');" +
-                "style.id='via-text-reflow-style';" +
-                "style.textContent='*{max-width:100vw !important;box-sizing:border-box !important;}" +
-                "body,p,div,span,td,th,li,a{word-wrap:break-word !important;overflow-wrap:break-word !important;white-space:normal !important;}" +
-                "pre{white-space:pre-wrap !important;}';" +
-                "document.head.appendChild(style);" +
-                "})();"
-        } else {
-            "(function(){" +
-                "var existing=document.getElementById('via-text-reflow-style');" +
-                "if(existing)existing.remove();" +
-                "})();"
-        }
+    // Android'in kendi onScaleChanged callback'i modern WebView'de pinch-zoom
+    // hareketlerinde güvenilmez/tetiklenmeyebiliyor (bilinen bir Chromium
+    // sorunu). Bunun yerine web standardı Visual Viewport API'sini
+    // (visualViewport.scale) JS içinde dinleyip stili JS'in kendisinin
+    // uygulamasını/kaldırmasını sağlıyoruz -- Android tarafına hiç bağımlı değil.
+    private fun installTextReflowWatcher(view: WebView) {
+        val js = "(function(){" +
+            "if(window.__viaReflowWatcherInstalled)return;" +
+            "window.__viaReflowWatcherInstalled=true;" +
+            "function viaCheckScale(){" +
+            "var scale=(window.visualViewport&&window.visualViewport.scale)?window.visualViewport.scale:1;" +
+            "var existing=document.getElementById('via-text-reflow-style');" +
+            "if(scale>1.5){" +
+            "if(!existing){" +
+            "var style=document.createElement('style');" +
+            "style.id='via-text-reflow-style';" +
+            "style.textContent='*{max-width:100vw !important;box-sizing:border-box !important;}" +
+            "body,p,div,span,td,th,li,a{word-wrap:break-word !important;overflow-wrap:break-word !important;white-space:normal !important;}" +
+            "pre{white-space:pre-wrap !important;}';" +
+            "document.head.appendChild(style);" +
+            "}" +
+            "}else{" +
+            "if(existing)existing.remove();" +
+            "}" +
+            "}" +
+            "if(window.visualViewport){" +
+            "window.visualViewport.addEventListener('resize',viaCheckScale);" +
+            "window.visualViewport.addEventListener('scroll',viaCheckScale);" +
+            "}" +
+            "})();"
         view.evaluateJavascript(js, null)
     }
 
@@ -970,16 +980,6 @@ class MainActivity : AppCompatActivity() {
                 return true
             }
 
-            override fun onScaleChanged(view: WebView, oldScale: Float, newScale: Float) {
-                super.onScaleChanged(view, oldScale, newScale)
-                // Pinch-zoom %150'yi geçince metni büyütmek yerine (textZoom
-                // ile çift katmanlı büyüme/bozulma riski olurdu) sayfanın
-                // GENİŞLİK sınırlarını zorluyoruz -- taşan içerik sarmaya
-                // zorlanıyor, yatay kaydırma ihtiyacı büyük ölçüde kalkıyor.
-                // Zoom geri düşünce normal görünüme dönülüyor.
-                applyTextReflow(view, newScale > 1.5f)
-            }
-
             override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean {
                 if (url.startsWith("http://") || url.startsWith("https://")) {
                     return false
@@ -1054,6 +1054,7 @@ class MainActivity : AppCompatActivity() {
                 showBars()
                 applyThemeColorFromPage()
                 applyForceDarkIfNeeded(view)
+                installTextReflowWatcher(view)
                 if (tab.isDesktopMode) {
                     view.evaluateJavascript(
                         "(function(){var m=document.querySelector('meta[name=viewport]');" +
