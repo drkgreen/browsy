@@ -151,7 +151,7 @@ class SettingsActivity : AppCompatActivity() {
     private fun buildDivider(): View {
         return View(this).apply {
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1))
-            setBackgroundColor(0xFFE0E0E0.toInt())
+            setBackgroundColor(ContextCompat.getColor(this@SettingsActivity, R.color.divider))
         }
     }
 
@@ -161,7 +161,7 @@ class SettingsActivity : AppCompatActivity() {
                 marginEnd = dp(16)
             }
             setImageResource(iconRes)
-            setColorFilter(0xFF6E6E73.toInt())
+            setColorFilter(ContextCompat.getColor(this@SettingsActivity, R.color.text_secondary))
             scaleType = ImageView.ScaleType.FIT_CENTER
         }
     }
@@ -192,12 +192,12 @@ class SettingsActivity : AppCompatActivity() {
         val titleView = TextView(this).apply {
             text = title
             textSize = 16f
-            setTextColor(0xFF1A1A1A.toInt())
+            setTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.text_primary))
         }
         val subtitleView = TextView(this).apply {
             text = subtitle
             textSize = 13f
-            setTextColor(0xFF8E8E93.toInt())
+            setTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.text_secondary))
             setPadding(0, dp(4), 0, 0)
         }
         textContainer.addView(titleView)
@@ -376,12 +376,12 @@ class SettingsActivity : AppCompatActivity() {
         val titleView = TextView(this).apply {
             text = title
             textSize = 16f
-            setTextColor(0xFF1A1A1A.toInt())
+            setTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.text_primary))
         }
         val subtitleView = TextView(this).apply {
             text = subtitle
             textSize = 13f
-            setTextColor(0xFF8E8E93.toInt())
+            setTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.text_secondary))
             setPadding(0, dp(4), 0, 0)
         }
         textContainer.addView(titleView)
@@ -442,14 +442,14 @@ class SettingsActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(16), dp(16), dp(16))
             background = GradientDrawable().apply {
-                setColor(0xFFF5F5F5.toInt())
+                setColor(ContextCompat.getColor(this@SettingsActivity, R.color.surface_alt))
                 cornerRadius = dp(8).toFloat()
             }
         }
 
         val previewText = TextView(this).apply {
             text = "Örnek metin böyle görünecek."
-            setTextColor(0xFF1A1A1A.toInt())
+            setTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.text_primary))
             textSize = 16f * (currentZoom / 100f)
         }
         previewBox.addView(previewText)
@@ -458,7 +458,7 @@ class SettingsActivity : AppCompatActivity() {
             text = "%$currentZoom"
             textSize = 13f
             gravity = Gravity.CENTER
-            setTextColor(0xFF8E8E93.toInt())
+            setTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.text_secondary))
             setPadding(0, dp(12), 0, dp(4))
         }
 
@@ -636,7 +636,7 @@ class SettingsActivity : AppCompatActivity() {
                 TextView(this).apply {
                     text = "Henüz bir izin kaydı yok"
                     setPadding(dp(16), dp(16), dp(16), dp(16))
-                    setTextColor(0xFF8E8E93.toInt())
+                    setTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.text_secondary))
                 }
             )
         } else {
@@ -664,7 +664,7 @@ class SettingsActivity : AppCompatActivity() {
             TextView(this).apply {
                 text = perm.host
                 textSize = 15f
-                setTextColor(0xFF1A1A1A.toInt())
+                setTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.text_primary))
             }
         )
         textContainer.addView(
@@ -672,7 +672,7 @@ class SettingsActivity : AppCompatActivity() {
                 val statusText = if (perm.decision == "allow") "İzin verildi" else "Reddedildi"
                 text = "${permissionDisplayName(perm.type)} — $statusText"
                 textSize = 13f
-                setTextColor(0xFF8E8E93.toInt())
+                setTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.text_secondary))
                 setPadding(0, dp(2), 0, 0)
             }
         )
@@ -680,7 +680,7 @@ class SettingsActivity : AppCompatActivity() {
         val removeButton = TextView(this).apply {
             text = "Kaldır"
             textSize = 14f
-            setTextColor(0xFF1976D2.toInt())
+            setTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.colorPrimary))
             setPadding(dp(12), dp(8), dp(12), dp(8))
             isClickable = true
             isFocusable = true
@@ -765,7 +765,7 @@ class SettingsActivity : AppCompatActivity() {
         val addRow = TextView(this).apply {
             text = "+ Yeni Adres Ekle"
             textSize = 15f
-            setTextColor(0xFF1976D2.toInt())
+            setTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.colorPrimary))
             setPadding(dp(16), dp(14), dp(16), dp(14))
             isClickable = true
             isFocusable = true
@@ -778,7 +778,7 @@ class SettingsActivity : AppCompatActivity() {
         rootColumn.addView(
             View(this).apply {
                 layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1))
-                setBackgroundColor(0xFFEEEEEE.toInt())
+                setBackgroundColor(ContextCompat.getColor(this@SettingsActivity, R.color.divider))
             }
         )
 
@@ -794,7 +794,7 @@ class SettingsActivity : AppCompatActivity() {
                 TextView(this).apply {
                     text = "Henüz kayıtlı adres yok"
                     setPadding(dp(16), dp(16), dp(16), dp(16))
-                    setTextColor(0xFF8E8E93.toInt())
+                    setTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.text_secondary))
                 }
             )
         } else {
@@ -828,14 +828,14 @@ class SettingsActivity : AppCompatActivity() {
             TextView(this).apply {
                 text = addr.label
                 textSize = 15f
-                setTextColor(0xFF1A1A1A.toInt())
+                setTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.text_primary))
             }
         )
         textContainer.addView(
             TextView(this).apply {
                 text = addr.fullName
                 textSize = 12f
-                setTextColor(0xFF8E8E93.toInt())
+                setTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.text_secondary))
                 setPadding(0, dp(2), 0, 0)
             }
         )
@@ -843,7 +843,7 @@ class SettingsActivity : AppCompatActivity() {
         val deleteButton = TextView(this).apply {
             text = "Sil"
             textSize = 14f
-            setTextColor(0xFFD32F2F.toInt())
+            setTextColor(ContextCompat.getColor(this@SettingsActivity, R.color.danger))
             setPadding(dp(12), dp(8), dp(12), dp(8))
             isClickable = true
             isFocusable = true
