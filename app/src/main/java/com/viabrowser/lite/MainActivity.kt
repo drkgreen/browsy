@@ -46,6 +46,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.viabrowser.lite.databinding.ActivityMainBinding
 import java.io.ByteArrayInputStream
@@ -262,6 +263,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen()
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -418,7 +420,7 @@ class MainActivity : AppCompatActivity() {
                 TextView(this).apply {
                     text = "Kayıtlı adres yok. Ayarlar > Otomatik Doldurma'dan ekleyebilirsin."
                     setPadding(dp(16), dp(16), dp(16), dp(16))
-                    setTextColor(0xFF8E8E93.toInt())
+                    setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_secondary))
                 }
             )
         } else {
@@ -446,14 +448,14 @@ class MainActivity : AppCompatActivity() {
             TextView(this).apply {
                 text = addr.label
                 textSize = 15f
-                setTextColor(0xFF1A1A1A.toInt())
+                setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_primary))
             }
         )
         row.addView(
             TextView(this).apply {
                 text = addr.fullName
                 textSize = 12f
-                setTextColor(0xFF8E8E93.toInt())
+                setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_secondary))
                 setPadding(0, dp(2), 0, 0)
             }
         )
@@ -582,7 +584,7 @@ class MainActivity : AppCompatActivity() {
             TextView(this).apply {
                 text = host
                 textSize = 13f
-                setTextColor(0xFF8E8E93.toInt())
+                setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_secondary))
                 setPadding(dp(20), 0, dp(20), dp(12))
             }
         )
@@ -636,7 +638,7 @@ class MainActivity : AppCompatActivity() {
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             text = title
             textSize = 15f
-            setTextColor(0xFF1A1A1A.toInt())
+            setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_primary))
         }
         val switch = Switch(this).apply {
             isChecked = checked
@@ -663,7 +665,7 @@ class MainActivity : AppCompatActivity() {
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
                 text = title
                 textSize = 15f
-                setTextColor(0xFF1A1A1A.toInt())
+                setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_primary))
             }
         )
         if (subtitle != null) {
@@ -671,7 +673,7 @@ class MainActivity : AppCompatActivity() {
                 TextView(this).apply {
                     text = subtitle
                     textSize = 13f
-                    setTextColor(0xFF8E8E93.toInt())
+                    setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_secondary))
                 }
             )
         }
@@ -684,7 +686,7 @@ class MainActivity : AppCompatActivity() {
                 topMargin = dp(8)
                 bottomMargin = dp(8)
             }
-            setBackgroundColor(0xFFEEEEEE.toInt())
+            setBackgroundColor(ContextCompat.getColor(this@MainActivity, R.color.divider))
         }
     }
 
@@ -764,14 +766,14 @@ class MainActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(16), dp(16), dp(16))
             background = GradientDrawable().apply {
-                setColor(0xFFF5F5F5.toInt())
+                setColor(ContextCompat.getColor(this@MainActivity, R.color.surface_alt))
                 cornerRadius = dp(8).toFloat()
             }
         }
 
         val previewText = TextView(this).apply {
             text = "Örnek metin böyle görünecek."
-            setTextColor(0xFF1A1A1A.toInt())
+            setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_primary))
             textSize = 16f * (currentZoom / 100f)
         }
         previewBox.addView(previewText)
@@ -780,7 +782,7 @@ class MainActivity : AppCompatActivity() {
             text = host
             textSize = 12f
             gravity = Gravity.CENTER
-            setTextColor(0xFF8E8E93.toInt())
+            setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_secondary))
             setPadding(0, 0, 0, dp(4))
         }
 
@@ -788,7 +790,7 @@ class MainActivity : AppCompatActivity() {
             text = "%$currentZoom"
             textSize = 13f
             gravity = Gravity.CENTER
-            setTextColor(0xFF8E8E93.toInt())
+            setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_secondary))
             setPadding(0, dp(12), 0, dp(4))
         }
 
@@ -1467,7 +1469,7 @@ class MainActivity : AppCompatActivity() {
                 background = cardRippleBackground()
                 setPadding(dp(10), dp(10), dp(10), dp(10))
                 setImageResource(R.drawable.ic_settings)
-                setColorFilter(0xFF1A1A1A.toInt())
+                setColorFilter(ContextCompat.getColor(this@MainActivity, R.color.text_primary))
                 scaleType = ImageView.ScaleType.FIT_CENTER
                 isClickable = true
                 isFocusable = true
@@ -1484,7 +1486,7 @@ class MainActivity : AppCompatActivity() {
                 background = cardRippleBackground()
                 setPadding(dp(10), dp(10), dp(10), dp(10))
                 setImageResource(R.drawable.ic_power)
-                setColorFilter(0xFF1A1A1A.toInt())
+                setColorFilter(ContextCompat.getColor(this@MainActivity, R.color.text_primary))
                 scaleType = ImageView.ScaleType.FIT_CENTER
                 isClickable = true
                 isFocusable = true
@@ -1534,7 +1536,7 @@ class MainActivity : AppCompatActivity() {
             layoutParams = LinearLayout.LayoutParams(dp(28), dp(28))
             setImageResource(iconRes)
             setColorFilter(
-                if (isActive) ContextCompat.getColor(this@MainActivity, R.color.colorPrimary) else 0xFF1A1A1A.toInt()
+                if (isActive) ContextCompat.getColor(this@MainActivity, R.color.colorPrimary) else ContextCompat.getColor(this@MainActivity, R.color.text_primary)
             )
             scaleType = ImageView.ScaleType.FIT_CENTER
         }
@@ -1547,7 +1549,7 @@ class MainActivity : AppCompatActivity() {
             text = label
             textSize = 13f
             gravity = Gravity.CENTER
-            setTextColor(0xFF1A1A1A.toInt())
+            setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_primary))
         }
 
         card.addView(iconView)
@@ -1562,7 +1564,7 @@ class MainActivity : AppCompatActivity() {
                 text = statusText
                 textSize = 12f
                 gravity = Gravity.CENTER
-                setTextColor(0xFF8E8E93.toInt())
+                setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_secondary))
             }
             card.addView(statusView)
         }
@@ -1814,9 +1816,9 @@ class MainActivity : AppCompatActivity() {
             setPadding(dp(12), dp(12), dp(12), dp(12))
             setBackgroundColor(
                 when {
-                    tab.isPrivate && isActive -> 0xFF3D3D3D.toInt()
-                    tab.isPrivate -> 0xFF2B2B2B.toInt()
-                    isActive -> 0xFFE8F0FE.toInt()
+                    tab.isPrivate && isActive -> ContextCompat.getColor(this@MainActivity, R.color.private_tab_background_active)
+                    tab.isPrivate -> ContextCompat.getColor(this@MainActivity, R.color.private_tab_background)
+                    isActive -> ContextCompat.getColor(this@MainActivity, R.color.active_tab_highlight)
                     else -> Color.TRANSPARENT
                 }
             )
@@ -1855,7 +1857,7 @@ class MainActivity : AppCompatActivity() {
                 gravity = Gravity.CENTER
                 textSize = 14f
                 setTextColor(Color.WHITE)
-                background = circleDrawable(0xFF9E9E9E.toInt())
+                background = circleDrawable(ContextCompat.getColor(this@MainActivity, R.color.avatar_fallback))
                 text = tab.title.firstOrNull()?.uppercase() ?: "?"
             }
         }
@@ -1870,14 +1872,14 @@ class MainActivity : AppCompatActivity() {
             textSize = 15f
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
-            setTextColor(if (tab.isPrivate) Color.WHITE else 0xFF1A1A1A.toInt())
+            setTextColor(if (tab.isPrivate) Color.WHITE else ContextCompat.getColor(this@MainActivity, R.color.text_primary))
         }
 
         val closeView = ImageView(this).apply {
             layoutParams = LinearLayout.LayoutParams(dp(36), dp(36))
             setPadding(dp(8), dp(8), dp(8), dp(8))
             setImageResource(R.drawable.ic_close)
-            setColorFilter(if (tab.isPrivate) Color.WHITE else 0xFF8E8E93.toInt())
+            setColorFilter(if (tab.isPrivate) Color.WHITE else ContextCompat.getColor(this@MainActivity, R.color.text_secondary))
             isClickable = true
             isFocusable = true
             setOnClickListener {
@@ -1936,7 +1938,7 @@ class MainActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
             textSize = 20f
             setTextColor(Color.WHITE)
-            background = circleDrawable(0xFF1976D2.toInt())
+            background = circleDrawable(ContextCompat.getColor(this@MainActivity, R.color.colorPrimary))
             text = "+"
         }
 
@@ -1948,7 +1950,7 @@ class MainActivity : AppCompatActivity() {
             ).apply { marginStart = dp(12) }
             text = "Yeni Sekme Aç"
             textSize = 15f
-            setTextColor(0xFF1A1A1A.toInt())
+            setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_primary))
         }
 
         row.addView(plusIcon)
@@ -1986,7 +1988,7 @@ class MainActivity : AppCompatActivity() {
             ).apply { marginStart = dp(12) }
             text = "Gizli Sekme Aç"
             textSize = 15f
-            setTextColor(0xFF1A1A1A.toInt())
+            setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_primary))
         }
 
         row.addView(icon)
@@ -2068,7 +2070,7 @@ class MainActivity : AppCompatActivity() {
             textSize = 15f
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
-            setTextColor(0xFF1A1A1A.toInt())
+            setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_primary))
         }
         row.addView(icon)
         row.addView(label)
