@@ -1233,6 +1233,7 @@ class MainActivity : AppCompatActivity() {
                 val encoded = Uri.encode(url)
                 val translateUrl = "https://translate.google.com/translate?sl=auto&tl=tr&u=$encoded"
                 addNewTab()
+                showBrowser()
                 currentWebView().loadUrl(translateUrl)
             }
         }
