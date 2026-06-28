@@ -3,4 +3,17 @@
     <color name="colorPrimaryDark">#0D47A1</color>
     <color name="colorAccent">#1976D2</color>
     <color name="bottomNavBackground">#6C72C4</color>
+    <color name="ic_launcher_background">#1E1B3E</color>
+
+    <!-- Anlamlı metin/yüzey paleti, kod genelinde tek kaynaktan yönetiliyor -->
+    <color name="text_primary">#1A1A1A</color>
+    <color name="text_secondary">#8E8E93</color>
+    <color name="divider">#EEEEEE</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="surface_alt">#F5F5F5</color>
+    <color name="danger">#D32F2F</color>
+    <color name="avatar_fallback">#9E9E9E</color>
+    <color name="active_tab_highlight">#E8F0FE</color>
+    <color name="private_tab_background">#2B2B2B</color>
+    <color name="private_tab_background_active">#3D3D3D</color>
 </resources>
