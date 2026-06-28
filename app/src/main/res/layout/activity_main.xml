@@ -71,6 +71,16 @@
                         android:paddingBottom="10dp"
                         android:singleLine="true" />
 
+                    <ImageButton
+                        android:id="@+id/btnTranslate"
+                        android:layout_width="36dp"
+                        android:layout_height="36dp"
+                        android:layout_marginEnd="4dp"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:contentDescription="Çevir"
+                        android:padding="8dp"
+                        android:src="@drawable/ic_translate" />
+
                 </LinearLayout>
 
                 <LinearLayout
