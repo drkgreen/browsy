@@ -1,6 +1,7 @@
 package com.viabrowser.lite
 
 import android.content.Context
+import androidx.core.content.ContextCompat
 import android.text.TextUtils
 import android.view.View
 import android.widget.LinearLayout
@@ -73,7 +74,7 @@ class HistoryManager(private val context: Context) {
         val clearRow = TextView(context).apply {
             text = "Geçmişi Temizle"
             textSize = 14f
-            setTextColor(0xFFD32F2F.toInt())
+            setTextColor(ContextCompat.getColor(context, R.color.danger))
             setPadding(dp(16), dp(14), dp(16), dp(14))
             isClickable = true
             isFocusable = true
@@ -96,7 +97,7 @@ class HistoryManager(private val context: Context) {
                 TextView(context).apply {
                     text = "Geçmiş boş"
                     setPadding(dp(16), dp(16), dp(16), dp(16))
-                    setTextColor(0xFF8E8E93.toInt())
+                    setTextColor(ContextCompat.getColor(context, R.color.text_secondary))
                 }
             )
         } else {
@@ -110,7 +111,7 @@ class HistoryManager(private val context: Context) {
             rootColumn.addView(
                 View(context).apply {
                     layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1))
-                    setBackgroundColor(0xFFEEEEEE.toInt())
+                    setBackgroundColor(ContextCompat.getColor(context, R.color.divider))
                 }
             )
         }
@@ -137,14 +138,14 @@ class HistoryManager(private val context: Context) {
                 textSize = 15f
                 maxLines = 1
                 ellipsize = TextUtils.TruncateAt.END
-                setTextColor(0xFF1A1A1A.toInt())
+                setTextColor(ContextCompat.getColor(context, R.color.text_primary))
             }
         )
         row.addView(
             TextView(context).apply {
                 text = formatTimestamp(entry.timestamp)
                 textSize = 12f
-                setTextColor(0xFF8E8E93.toInt())
+                setTextColor(ContextCompat.getColor(context, R.color.text_secondary))
                 setPadding(0, dp(2), 0, 0)
             }
         )
