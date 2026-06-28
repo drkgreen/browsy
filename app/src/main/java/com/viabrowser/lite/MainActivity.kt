@@ -1225,6 +1225,17 @@ class MainActivity : AppCompatActivity() {
         binding.btnSiteSettings.setOnClickListener {
             showSiteSettingsPanel()
         }
+        binding.btnTranslate.setOnClickListener {
+            val url = currentWebView().url
+            if (url.isNullOrBlank() || url == "about:blank") {
+                Toast.makeText(this, "Çevrilecek bir sayfa yok", Toast.LENGTH_SHORT).show()
+            } else {
+                val encoded = Uri.encode(url)
+                val translateUrl = "https://translate.google.com/translate?sl=auto&tl=tr&u=$encoded"
+                addNewTab()
+                currentWebView().loadUrl(translateUrl)
+            }
+        }
         binding.editUrl.setOnFocusChangeListener { _, hasFocus ->
             if (hasFocus) {
                 suppressUrlFocusRevert = false
@@ -1345,7 +1356,7 @@ class MainActivity : AppCompatActivity() {
             buildFunctionMenuCard(
                 iconRes = R.drawable.ic_block,
                 label = "Reklam Engelleme",
-                statusText = if (adBlockOn) "Açık" else "Kapalı",
+                statusText = null,
                 isActive = adBlockOn
             ) {
                 val newState = !isAdBlockEnabled()
@@ -1435,7 +1446,7 @@ class MainActivity : AppCompatActivity() {
             buildFunctionMenuCard(
                 iconRes = R.drawable.ic_desktop,
                 label = "Masaüstü Sitesi",
-                statusText = if (currentTab().isDesktopMode) "Açık" else "Kapalı",
+                statusText = null,
                 isActive = currentTab().isDesktopMode
             ) {
                 dialog.dismiss()
