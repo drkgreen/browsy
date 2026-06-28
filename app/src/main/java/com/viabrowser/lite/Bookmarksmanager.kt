@@ -2,6 +2,7 @@ package com.viabrowser.lite
 
 import android.content.ClipData
 import android.content.Context
+import androidx.core.content.ContextCompat
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
@@ -367,7 +368,7 @@ class BookmarksManager(
                 gravity = Gravity.CENTER
                 textSize = 22f
                 setTextColor(Color.WHITE)
-                background = circleDrawable(if (isAddTile) 0xFF1976D2.toInt() else 0xFF9E9E9E.toInt())
+                background = circleDrawable(if (isAddTile) ContextCompat.getColor(context, R.color.colorPrimary) else ContextCompat.getColor(context, R.color.avatar_fallback))
                 text = if (isAddTile) "+" else (title.firstOrNull()?.uppercase() ?: "?")
             }
         }
@@ -382,7 +383,7 @@ class BookmarksManager(
             gravity = Gravity.CENTER
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
-            setTextColor(0xFF424242.toInt())
+            setTextColor(ContextCompat.getColor(context, R.color.text_primary))
         }
 
         container.addView(iconView)
