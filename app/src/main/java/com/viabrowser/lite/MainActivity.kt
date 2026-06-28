@@ -544,7 +544,7 @@ class MainActivity : AppCompatActivity() {
                 "if(existing)existing.remove();" +
                 "var style=document.createElement('style');" +
                 "style.id=id;" +
-                "style.textContent='html{filter:invert(1) hue-rotate(180deg) !important;background:#fff !important;}' +" +
+                "style.textContent='html{filter:invert(1) hue-rotate(180deg) !important;background:#D4D4D4 !important;}' +" +
                 "'img,video,picture,canvas,svg,iframe{filter:invert(1) hue-rotate(180deg) !important;}';" +
                 "document.documentElement.appendChild(style);" +
                 "})();"
