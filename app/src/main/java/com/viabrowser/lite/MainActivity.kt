@@ -536,41 +536,6 @@ class MainActivity : AppCompatActivity() {
         return getSharedPreferences("via_lite_prefs", MODE_PRIVATE).getBoolean("force_dark_web", false)
     }
 
-    // ---- Pinch-zoom %150'yi geçince metin sarmalama (text reflow) ----
-    // Android'in kendi onScaleChanged callback'i modern WebView'de pinch-zoom
-    // hareketlerinde güvenilmez/tetiklenmeyebiliyor (bilinen bir Chromium
-    // sorunu). Bunun yerine web standardı Visual Viewport API'sini
-    // (visualViewport.scale) JS içinde dinleyip stili JS'in kendisinin
-    // uygulamasını/kaldırmasını sağlıyoruz -- Android tarafına hiç bağımlı değil.
-    private fun installTextReflowWatcher(view: WebView) {
-        val js = "(function(){" +
-            "if(window.__viaReflowWatcherInstalled)return;" +
-            "window.__viaReflowWatcherInstalled=true;" +
-            "function viaCheckScale(){" +
-            "var scale=(window.visualViewport&&window.visualViewport.scale)?window.visualViewport.scale:1;" +
-            "var existing=document.getElementById('via-text-reflow-style');" +
-            "if(scale>1.5){" +
-            "if(!existing){" +
-            "var style=document.createElement('style');" +
-            "style.id='via-text-reflow-style';" +
-            "style.textContent='*{max-width:100vw !important;box-sizing:border-box !important;}" +
-            "body,p,div,span,td,th,li,a{word-wrap:break-word !important;overflow-wrap:break-word !important;white-space:normal !important;}" +
-            "pre{white-space:pre-wrap !important;}';" +
-            "document.head.appendChild(style);" +
-            "}" +
-            "}else{" +
-            "if(existing)existing.remove();" +
-            "}" +
-            "}" +
-            "if(window.visualViewport){" +
-            "window.visualViewport.addEventListener('resize',viaCheckScale);" +
-            "window.visualViewport.addEventListener('scroll',viaCheckScale);" +
-            "}" +
-            "})();"
-        view.evaluateJavascript(js, null)
-    }
-
-
     private fun applyForceDarkIfNeeded(view: WebView) {
         if (isForceDarkWebEnabled()) {
             val js = "(function(){" +
@@ -1054,7 +1019,6 @@ class MainActivity : AppCompatActivity() {
                 showBars()
                 applyThemeColorFromPage()
                 applyForceDarkIfNeeded(view)
-                installTextReflowWatcher(view)
                 if (tab.isDesktopMode) {
                     view.evaluateJavascript(
                         "(function(){var m=document.querySelector('meta[name=viewport]');" +
@@ -1449,10 +1413,7 @@ class MainActivity : AppCompatActivity() {
                 isActive = false
             ) {
                 dialog.dismiss()
-                historyManager.showHistoryList { url ->
-                    showBrowser()
-                    currentWebView().loadUrl(url)
-                }
+                startActivity(Intent(this, HistoryActivity::class.java))
             }
         )
 
